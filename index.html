@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Shopping Site — Final</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;max-width:980px;margin:18px auto;background:#f7f7f8;color:#202020}
+  header{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #ddd;flex-wrap:wrap}
+  h1{margin:0;font-size:20px}
+  h2,h3{margin:12px 0 8px}
+  .item{background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:12px;margin:10px 0;box-shadow:0 1px 2px rgba(0,0,0,0.03)}
+  button{padding:6px 10px;border-radius:6px;border:1px solid #bdbdbd;background:#fafafa;cursor:pointer}
+  button:disabled{opacity:0.5;cursor:not-allowed}
+  #cartSection{margin-top:18px;padding:12px;background:#fff;border-radius:8px;border:1px solid #e6e6e6}
+  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200}
+  .modal-content{background:#fff;padding:18px;border-radius:8px;width:420px;margin:6% auto}
+  input,textarea,select{display:block;margin:8px 0;padding:8px;width:94%;box-sizing:border-box}
+  #adminPanel{margin-top:20px;padding:12px;background:#fff;border-radius:8px;border:1px solid #e6e6e6}
+  .adminItem{border-bottom:1px solid #f0f0f0;padding:6px 0;display:flex;justify-content:space-between;align-items:center}
+  #statusBar{font-size:13px;color:#555}
+  .status-ok{color:green}
+  .status-bad{color:red}
+  pre#adminLogView, pre#ordersView{white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:6px;display:none;max-height:300px;overflow:auto}
+  small.note{color:#666}
+  .flex-row{display:flex;gap:8px;align-items:center}
+  .muted{color:#666;font-size:90%}
+  .order-row{margin:6px 0;padding:6px;border:1px solid #eee;border-radius:6px;background:#fff;display:flex;justify-content:space-between;align-items:center}
+  .order-actions button{margin-left:6px}
+  .badge{padding:2px 6px;border-radius:4px;font-size:12px}
+  .badge-done{background:#e6ffed;color:#007a3a}
+  .badge-deleted{background:#ffecec;color:#9a1c1c}
+  .admin-controls button{margin-left:6px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🛒 Durga Pada Das Shopping Site</h1>
+    <div id="statusBar">Resolving server...</div>
+  </div>
+  <div id="userPanel">
+    <span id="userInfo">Guest</span>
+    <button id="loginBtn">Login / Register</button>
+    <button id="adminLoginBtn">Admin Login</button>
+    <button id="logoutBtn" style="display:none">Logout</button>
+  </div>
+</header>
+
+<main>
+  <h2>Products</h2>
+  <div id="itemList"><small class="note">Loading items…</small></div>
+
+  <section id="cartSection">
+    <h3>Your Cart</h3>
+    <ul id="cartList"></ul>
+    <p id="cartTotal" class="muted">Total will be computed at checkout</p>
+    <button id="placeOrderBtn">Place Order</button>
+  </section>
+
+  <section id="adminPanel" style="display:none;">
+    <h3>Admin Panel</h3>
+    <div id="adminUnlocked" style="display:none;">
+      <h4>Add / Update Item</h4>
+      <input id="itemId" placeholder="ID (leave blank to auto)">
+      <input id="itemTitle" placeholder="Title">
+      <input id="itemPrice" placeholder="Price (e.g. 199.99)">
+      <input id="itemStock" placeholder="Stock (integer)">
+      <textarea id="itemDesc" placeholder="Description"></textarea>
+      <div class="flex-row">
+        <button id="saveItemBtn">Save Item</button>
+        <button id="clearEditBtn">Clear</button>
+        <button id="viewLogsBtn">View Admin Log</button>
+        <button id="viewOrdersBtn">View Orders</button>
+        <select id="ordersFilter">
+          <option value="all">All</option>
+          <option value="pending">Pending</option>
+          <option value="done">Done</option>
+          <option value="deleted">Deleted</option>
+        </select>
+      </div>
+      <h4 style="margin-top:12px">Existing Items</h4>
+      <div id="adminItemList"></div>
+
+      <h4 style="margin-top:14px">Admin Log</h4>
+      <pre id="adminLogView"></pre>
+
+      <h4 style="margin-top:14px">Orders</h4>
+      <div id="ordersList"></div>
+      <pre id="ordersView"></pre>
+    </div>
+  </section>
+</main>
+
+<!-- User modal -->
+<div id="loginModal" class="modal">
+  <div class="modal-content">
+    <h3>Login / Register</h3>
+    <input id="name" placeholder="Full name (for register)">
+    <input id="phone" placeholder="Phone (digits only)">
+    <input id="password" type="password" placeholder="Password">
+    <div style="text-align:right;margin-top:8px">
+      <button id="loginSubmit">Submit</button>
+      <button id="closeModal">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin modal -->
+<div id="adminModal" class="modal">
+  <div class="modal-content">
+    <h3>Admin Login</h3>
+    <input id="adminUser" placeholder="Admin username">
+    <input id="adminPass" type="password" placeholder="Admin password">
+    <div style="text-align:right;margin-top:8px">
+      <button id="adminLoginSubmit">Login</button>
+      <button id="closeAdminModal">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/*
+  Final shop.html
+  - tunnel-aware (reads tunnel.txt from page origin), fallback to localhost
+  - orders saved to shopping-site/orders/orderN.txt
+  - admin log: shopping-site/admin_log.txt
+  - admin creds: shopping-site/admins.txt (plaintext)
+  - api key internal and never shown
+  - edit & delete items supported (delete actually persists to the server items room)
+*/
+
+let baseUrl = null;
+const serverKey = "5duM4W8HZiQBSU4v"; // internal only
+let currentUser = null;
+let cart = {};
+let adminUser = null;
+let adminUnlocked = false;
+
+// utilities
+function timeNow(){ const d=new Date(); const pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+function showStatus(text, ok){ const s=document.getElementById("statusBar"); s.textContent=text; s.className = ok ? "status-ok" : "status-bad"; }
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// resolve server from tunnel.txt or fallback
+async function resolveServer(){
+  try{
+    const origin = (location.protocol === 'file:') ? null : location.origin;
+    if(origin){
+      const url = origin.replace(/\/$/,'') + '/tunnel.txt';
+      const r = await fetch(url, {cache:"no-store"});
+      if(r.ok){
+        const text = (await r.text()).trim();
+        if(text){
+          try{ const u = new URL(text); return u.origin; }catch(e){ return text.replace(/\/$/,''); }
+        }
+      }
+    }
+  }catch(e){}
+  return "http://localhost:8080";
+}
+
+// ---------------- API helpers ----------------
+
+// improved apiPost that returns result metadata and logs details
+async function apiPost(room, data){
+  try {
+    const res = await fetch(`${baseUrl}/room/${room}?key=${encodeURIComponent(serverKey)}`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(()=>"(no body)");
+      console.error("apiPost failed:", res.status, txt);
+      return { ok: false, status: res.status, text: txt };
+    }
+    let json = null;
+    try { json = await res.json(); } catch(e) { json = null; }
+    return { ok: true, status: res.status, json };
+  } catch (e) {
+    console.error("apiPost error", e);
+    return { ok: false, error: e };
+  }
+}
+
+async function apiGet(room){
+  try {
+    const res = await fetch(`${baseUrl}/room/${room}?key=${encodeURIComponent(serverKey)}`);
+    if(!res.ok) return {};
+    const j = await res.json();
+    return j.data || {};
+  } catch(e) { console.error("apiGet error", e); return {}; }
+}
+
+async function fetchFile(path){
+  try{
+    return await fetch(`${baseUrl}/file/${encodeURIComponent(path)}?key=${encodeURIComponent(serverKey)}`);
+  }catch(e){ console.error("fetchFile error", e); throw e; }
+}
+async function uploadFile(path, blob){
+  const form = new FormData();
+  form.append("file", blob, path);
+  return fetch(`${baseUrl}/file/${encodeURIComponent(path)}?key=${encodeURIComponent(serverKey)}`, { method: "POST", body: form });
+}
+async function listFilesWithPrefix(prefix){
+  try{
+    const res = await fetch(`${baseUrl}/files?key=${encodeURIComponent(serverKey)}&prefix=${encodeURIComponent(prefix)}`);
+    if(!res.ok) return [];
+    const j = await res.json();
+    return Array.isArray(j.files) ? j.files : [];
+  }catch(e){ console.error("listFilesWithPrefix error", e); return []; }
+}
+
+// ---------------- admin log ----------------
+async function logAdmin(action){
+  if(!adminUser) return;
+  const line = `[${timeNow()}] ${adminUser}: ${action}\n`;
+  let existing = "";
+  try{
+    const r = await fetchFile("shopping-site/admin_log.txt");
+    if(r.ok) existing = await r.text();
+  }catch(e){}
+  const blob = new Blob([existing + line], { type: "text/plain" });
+  try{
+    await uploadFile("shopping-site/admin_log.txt", blob);
+  }catch(e){
+    console.error("logAdmin write failed", e);
+  }
+}
+
+// ---------------- login / register ----------------
+async function loginOrRegister(){
+  const name = document.getElementById("name").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+  const pass = document.getElementById("password").value;
+  if(!phone || !pass){ alert("Enter phone and password"); return; }
+  let accounts = await apiGet("accounts");
+  if(!accounts || typeof accounts !== "object") accounts = {};
+  if(!accounts[phone]){
+    accounts[phone] = { name: name || phone, phone, password: pass, role: "user" };
+    const res = await apiPost("accounts", accounts);
+    if(!res || !res.ok){ alert("Failed to create account on server"); return; }
+    alert("Account created & logged in");
+  } else {
+    if(accounts[phone].password !== pass){ alert("Wrong password"); return; }
+    alert("Logged in");
+  }
+  currentUser = accounts[phone];
+  hideLogin();
+  updateUserUI();
+  await loadItems();
+}
+function logout(){
+  currentUser = null; adminUnlocked = false; adminUser = null;
+  updateUserUI();
+  document.getElementById("adminPanel").style.display = "none";
+  document.getElementById("adminUnlocked").style.display = "none";
+  loadItems();
+}
+
+// ---------------- admin login ----------------
+async function adminLogin(){
+  const user = document.getElementById("adminUser").value.trim();
+  const pass = document.getElementById("adminPass").value;
+  if(!user || !pass){ alert("Enter both fields"); return; }
+  try{
+    const r = await fetchFile("shopping-site/admins.txt");
+    if(!r.ok){ alert("Cannot access admins.txt"); return; }
+    const text = await r.text();
+    const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+    let ok = false;
+    for(const line of lines){
+      const parts = line.split(":");
+      if(parts.length >= 2){
+        const u = parts.shift();
+        const p = parts.join(":");
+        if(u===user && p===pass){ ok = true; break; }
+      }
+    }
+    if(ok){
+      adminUser = user; adminUnlocked = true;
+      document.getElementById("adminPanel").style.display = "block";
+      document.getElementById("adminUnlocked").style.display = "block";
+      hideAdminLogin();
+      alert("Admin authenticated");
+      await logAdmin("Logged in");
+      await loadItems();
+    } else alert("Invalid admin credentials");
+  }catch(e){ console.error("adminLogin error", e); alert("Failed to verify admin credentials"); }
+}
+
+// ---------------- items ----------------
+async function loadItems(){
+  const items = await apiGet("items");
+  const container = document.getElementById("itemList");
+  container.innerHTML = "";
+  if(!items || Object.keys(items).length === 0){
+    container.innerHTML = "<small>No items available.</small>";
+  } else {
+    for(const it of Object.values(items)){
+      const el = document.createElement("div");
+      el.className = "item";
+      const priceNum = (typeof it.price === "number") ? it.price : parseFloat(it.price || 0);
+      const priceStr = Number.isFinite(priceNum) ? priceNum.toFixed(2) : "0.00";
+      el.innerHTML = `<strong>${escapeHtml(it.title)}</strong> — ₹${priceStr}<br/>
+                      <div style="margin-top:6px">${escapeHtml(it.desc || "")}</div>
+                      <div style="margin-top:8px">Stock: ${Number(it.stock || 0)}</div>
+                      <div style="margin-top:8px">
+                        <button ${!currentUser || (Number(it.stock||0) <= 0) ? "disabled" : ""} data-id="${escapeHtml(it.id)}">Add to Cart</button>
+                      </div>`;
+      const btn = el.querySelector("button");
+      btn.addEventListener("click", ()=> addToCart(String(it.id)));
+      container.appendChild(el);
+    }
+  }
+  if(adminUnlocked) renderAdminList(items);
+  updateCartUI();
+}
+
+// save item (create or update)
+async function saveItem(){
+  if(!adminUnlocked || !adminUser){ alert("Admin required"); return; }
+  const idInput = document.getElementById("itemId").value.trim();
+  const title = document.getElementById("itemTitle").value.trim();
+  const price = parseFloat(document.getElementById("itemPrice").value.trim() || "0");
+  const stock = parseInt(document.getElementById("itemStock").value.trim() || "0");
+  const desc = document.getElementById("itemDesc").value.trim();
+  if(!title){ alert("Title required"); return; }
+
+  let data = await apiGet("items");
+  if(!data || typeof data !== "object") data = {};
+  const id = idInput || String(Date.now());
+  const isUpdate = Object.prototype.hasOwnProperty.call(data, id);
+
+  data[id] = { id, title, price, stock, desc };
+
+  const res = await apiPost("items", data);
+  if(!res || !res.ok){
+    alert("Failed to save item on server. See console.");
+    console.error("saveItem apiPost response:", res);
+    return;
+  }
+
+  await logAdmin(`${isUpdate ? "Edited" : "Saved"} item "${title}" (id:${id})`);
+  alert("Item saved.");
+  // clear inputs
+  document.getElementById("itemId").value = "";
+  document.getElementById("itemTitle").value = "";
+  document.getElementById("itemPrice").value = "";
+  document.getElementById("itemStock").value = "";
+  document.getElementById("itemDesc").value = "";
+  await loadItems();
+}
+
+// populate edit form
+function editItemPopulate(id, item){
+  if(!adminUnlocked || !adminUser){ alert("Admin required"); return; }
+  document.getElementById("itemId").value = id;
+  document.getElementById("itemTitle").value = item.title || "";
+  document.getElementById("itemPrice").value = (typeof item.price === "number") ? item.price : (item.price || "");
+  document.getElementById("itemStock").value = item.stock || 0;
+  document.getElementById("itemDesc").value = item.desc || "";
+  document.getElementById("itemTitle").scrollIntoView({behavior:"smooth", block:"center"});
+}
+
+// delete item (with server save and check)
+async function deleteItem(id){
+  if(!adminUnlocked || !adminUser){ alert("Admin required"); return; }
+  id = String(id);
+  let data = await apiGet("items");
+  if(!data || typeof data !== "object"){ alert("No items data on server"); return; }
+  if(!Object.prototype.hasOwnProperty.call(data, id)){ alert("Item not found: " + id); await loadItems(); return; }
+  const title = data[id].title || id;
+  if(!confirm(`Delete item "${title}"? This cannot be undone.`)) return;
+  delete data[id];
+  const res = await apiPost("items", data);
+  if(!res || !res.ok){
+    console.error("Failed to save updated items after delete:", res);
+    alert("Failed to delete item on server. See console.");
+    await loadItems();
+    return;
+  }
+  await logAdmin(`Deleted item "${title}" (id:${id})`);
+  await loadItems();
+}
+
+// render admin list with Edit + Delete
+function renderAdminList(items){
+  const list = document.getElementById("adminItemList");
+  list.innerHTML = "";
+  if(!items || Object.keys(items).length === 0){ list.innerHTML = "<small>No items</small>"; return; }
+  for(const it of Object.values(items)){
+    const id = String(it.id);
+    const d = document.createElement("div");
+    d.className = "adminItem";
+    const left = document.createElement("div");
+    left.innerHTML = `<strong>${escapeHtml(it.title)}</strong> — ₹${(Number(it.price)||0).toFixed(2)} (stock: ${Number(it.stock||0)})`;
+    const controls = document.createElement("div");
+    controls.className = "admin-controls";
+    const editBtn = document.createElement("button"); editBtn.textContent = "Edit";
+    const delBtn = document.createElement("button"); delBtn.textContent = "Delete";
+    editBtn.addEventListener("click", async ()=>{
+      const data = await apiGet("items");
+      if(!data || !data[id]){ alert("Item not found on server"); await loadItems(); return; }
+      editItemPopulate(id, data[id]);
+    });
+    delBtn.addEventListener("click", async ()=> deleteItem(id));
+    controls.appendChild(editBtn);
+    controls.appendChild(delBtn);
+    d.appendChild(left);
+    d.appendChild(controls);
+    list.appendChild(d);
+  }
+}
+
+// ---------------- admin log view ----------------
+async function viewAdminLog(){
+  if(!adminUnlocked || !adminUser){ alert("Admin required"); return; }
+  try{
+    const res = await fetchFile("shopping-site/admin_log.txt");
+    const view = document.getElementById("adminLogView");
+    if(!res.ok){ view.textContent="(no log yet)"; view.style.display="block"; return; }
+    const txt = await res.text();
+    view.textContent = txt || "(no log entries)";
+    view.style.display = "block";
+  }catch(e){ console.error("viewAdminLog error", e); alert("Failed to load admin log"); }
+}
+
+// ---------------- orders (in shopping-site/orders/) ----------------
+async function viewOrders(){
+  if(!adminUnlocked || !adminUser){ alert("Admin required"); return; }
+  const listEl = document.getElementById("ordersList");
+  const viewEl = document.getElementById("ordersView");
+  const filter = document.getElementById("ordersFilter").value;
+  listEl.innerHTML = "<small>Loading orders…</small>";
+  viewEl.style.display = "none";
+  try{
+    const files = await listFilesWithPrefix("shopping-site/orders/");
+    if(!files || files.length === 0){ listEl.innerHTML = "<small>No orders found</small>"; return; }
+    files.sort((a,b)=>{
+      const ra = a.match(/order(\d+)\.txt$/i); const rb = b.match(/order(\d+)\.txt$/i);
+      const na = ra ? parseInt(ra[1],10) : 0; const nb = rb ? parseInt(rb[1],10) : 0; return nb - na;
+    });
+    listEl.innerHTML = "";
+    for(const f of files){
+      let status = "pending"; let content = "";
+      try{ const res = await fetchFile(f); if(res.ok){ content = await res.text(); if(/STATUS:\s*DONE/i.test(content)) status = "done"; if(/DELETED by/i.test(content)) status = "deleted"; } }catch(e){}
+      if(filter === "done" && status !== "done") continue;
+      if(filter === "pending" && status !== "pending") continue;
+      if(filter === "deleted" && status !== "deleted") continue;
+      const row = document.createElement("div"); row.className = "order-row";
+      const name = f.split('/').pop();
+      const left = document.createElement("div"); left.innerHTML = `<strong>${escapeHtml(name)}</strong><div class="muted" style="font-size:12px">${escapeHtml(f)}</div>`;
+      const right = document.createElement("div");
+      const badge = document.createElement("span");
+      badge.className = "badge " + (status==="done" ? "badge-done" : status==="deleted" ? "badge-deleted" : "");
+      badge.textContent = status.toUpperCase();
+      const actions = document.createElement("div"); actions.className = "order-actions";
+      const viewBtn = document.createElement("button"); viewBtn.textContent = "View";
+      const doneBtn = document.createElement("button"); doneBtn.textContent = "Mark Done";
+      const delBtn = document.createElement("button"); delBtn.textContent = "Delete";
+      viewBtn.onclick = async ()=>{
+        try{ const r = await fetchFile(f); if(!r.ok){ alert("Failed to fetch order"); return; } const txt = await r.text(); viewEl.textContent = txt; viewEl.style.display = "block"; }catch(e){ console.error("view order error", e); alert("Failed to fetch order"); }
+      };
+      doneBtn.onclick = async ()=>{
+        if(status === "done"){ alert("Order already marked done"); return; }
+        if(!confirm("Mark this order as DONE?")) return;
+        try{
+          const r = await fetchFile(f);
+          if(!r.ok){ alert("Cannot read order"); return; }
+          let txt = await r.text();
+          txt += `\n\nSTATUS: DONE by ${adminUser} at ${timeNow()}\n`;
+          const blob = new Blob([txt], { type: "text/plain" });
+          const up = await uploadFile(f, blob);
+          if(!up.ok){ alert("Failed to write done status"); return; }
+          await logAdmin(`Marked order ${name} as DONE`);
+          alert("Order marked done");
+          await viewOrders();
+        }catch(e){ console.error("markDone error", e); alert("Failed to mark done"); }
+      };
+      delBtn.onclick = async ()=>{
+        if(!confirm("Overwrite order file with DELETED marker?")) return;
+        try{
+          const txt = `DELETED by ${adminUser} at ${timeNow()}\n`;
+          const blob = new Blob([txt], { type: "text/plain" });
+          const up = await uploadFile(f, blob);
+          if(!up.ok){ alert("Failed to write delete marker"); return; }
+          await logAdmin(`Deleted order ${name}`);
+          alert("Order deleted (overwritten)");
+          await viewOrders();
+        }catch(e){ console.error("deleteOrder error", e); alert("Failed to delete order"); }
+      };
+      actions.appendChild(viewBtn); actions.appendChild(doneBtn); actions.appendChild(delBtn);
+      right.appendChild(badge); right.appendChild(actions);
+      row.appendChild(left); row.appendChild(right); listEl.appendChild(row);
+    }
+  }catch(e){ console.error("viewOrders error", e); listEl.innerHTML = "<small>Error loading orders</small>"; }
+}
+
+// ---------------- orders helpers ----------------
+async function getNextOrderNumber(){
+  try{
+    const files = await listFilesWithPrefix("shopping-site/orders/");
+    let maxNum = 0;
+    const re = /order(\d+)\.txt$/i;
+    for(const f of files){
+      const m = f.match(re);
+      if(m && m[1]){
+        const digits = m[1];
+        let val = 0;
+        for(let i=0;i<digits.length;i++){
+          const d = digits.charCodeAt(i) - 48;
+          if(d>=0 && d<=9) val = val*10 + d;
+        }
+        if(val > maxNum) maxNum = val;
+      }
+    }
+    return maxNum + 1;
+  }catch(e){ console.error("getNextOrderNumber error", e); return Date.now(); }
+}
+async function listFilesWithPrefix(prefix){
+  try{
+    const res = await fetch(`${baseUrl}/files?key=${encodeURIComponent(serverKey)}&prefix=${encodeURIComponent(prefix)}`);
+    if(!res.ok) return [];
+    const j = await res.json();
+    return Array.isArray(j.files) ? j.files : [];
+  }catch(e){ console.error("listFilesWithPrefix", e); return []; }
+}
+
+// ---------------- cart and place order ----------------
+function addToCart(id){ cart[id] = (cart[id] || 0) + 1; updateCartUI(); }
+function updateCartUI(){ const ul = document.getElementById("cartList"); ul.innerHTML = ""; for(const [id, qty] of Object.entries(cart)){ const li = document.createElement("li"); li.textContent = `${id} x ${qty}`; ul.appendChild(li); } }
+
+async function placeOrder(){
+  if(!currentUser){ alert("Please login first"); return; }
+  const items = await apiGet("items");
+  if(!items || Object.keys(items).length === 0){ alert("No items on server"); return; }
+  let lines = []; let totalCents = 0;
+  for(const [id, qty] of Object.entries(cart)){
+    const it = items[id];
+    if(!it){ alert("Item not found: " + id); return; }
+    const stock = Number(it.stock || 0);
+    const price = Number(it.price || 0);
+    if(stock < qty){ alert(`Not enough stock for "${it.title || id}"`); return; }
+    const unitCents = Math.round(price * 100);
+    totalCents += unitCents * qty;
+    lines.push({ title: it.title || id, qty: qty, unitPrice: price });
+    items[id].stock = stock - qty;
+  }
+  const res = await apiPost("items", items);
+  if(!res || !res.ok){ alert("Failed to update item stock on server. Order aborted."); console.error("placeOrder apiPost result:", res); return; }
+
+  const orderNum = await getNextOrderNumber();
+  const filename = `shopping-site/orders/order${orderNum}.txt`;
+  const isoTime = new Date().toISOString();
+  let orderText = `Order: ${orderNum}\nTime: ${isoTime}\nName: ${currentUser.name}\nPhone: ${currentUser.phone}\n\nItems:\n`;
+  for(const li of lines) orderText += `- ${li.title} x${li.qty} @ ${Number(li.unitPrice).toFixed(2)}\n`;
+  orderText += `\nTotal: ₹${(totalCents/100).toFixed(2)}\n`;
+  const blob = new Blob([orderText], { type: "text/plain" });
+  try{
+    const up = await uploadFile(filename, blob);
+    if(!up.ok){ alert("Failed to save order file on server"); console.error("upload status", up.status, await up.text().catch(()=>"")); return; }
+  }catch(e){ console.error("order upload failed", e); alert("Failed to upload order"); return; }
+  cart = {}; updateCartUI(); alert(`Order placed: ${filename}`);
+}
+
+// ---------------- UI helpers ----------------
+function showLogin(){ document.getElementById("loginModal").style.display = "block"; }
+function hideLogin(){ document.getElementById("loginModal").style.display = "none"; }
+function showAdminLogin(){ document.getElementById("adminModal").style.display = "block"; }
+function hideAdminLogin(){ document.getElementById("adminModal").style.display = "none"; }
+function updateUserUI(){ document.getElementById("userInfo").textContent = currentUser ? currentUser.name : "Guest"; document.getElementById("loginBtn").style.display = currentUser ? "none" : "inline"; document.getElementById("logoutBtn").style.display = currentUser ? "inline" : "none"; }
+
+// ---------------- events wiring ----------------
+document.getElementById("loginBtn").onclick = showLogin;
+document.getElementById("closeModal").onclick = hideLogin;
+document.getElementById("loginSubmit").onclick = loginOrRegister;
+document.getElementById("logoutBtn").onclick = logout;
+document.getElementById("placeOrderBtn").onclick = placeOrder;
+document.getElementById("adminLoginBtn").onclick = showAdminLogin;
+document.getElementById("closeAdminModal").onclick = hideAdminLogin;
+document.getElementById("adminLoginSubmit").onclick = adminLogin;
+document.getElementById("saveItemBtn").onclick = saveItem;
+document.getElementById("clearEditBtn").onclick = ()=>{ document.getElementById("itemId").value=""; document.getElementById("itemTitle").value=""; document.getElementById("itemPrice").value=""; document.getElementById("itemStock").value=""; document.getElementById("itemDesc").value=""; };
+document.getElementById("viewLogsBtn").onclick = viewAdminLog;
+document.getElementById("viewOrdersBtn").onclick = viewOrders;
+document.getElementById("ordersFilter").onchange = viewOrders;
+
+// ---------------- startup ----------------
+(async function init(){
+  baseUrl = await resolveServer();
+  showStatus("Server: " + (baseUrl || "unknown"), !!baseUrl);
+  try{
+    const r = await fetch(`${baseUrl}/room/default?key=${encodeURIComponent(serverKey)}`);
+    if(r.ok){ showStatus("Connected ✓", true); await loadItems(); }
+    else showStatus("Key invalid or server error ✗", false);
+  }catch(e){ showStatus("Server unreachable ✗", false); console.error(e); }
+})();
+</script>
+</body>
+</html>
