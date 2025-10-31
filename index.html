@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Shopping Site — Final</title>
+<title>Shopping Site — Final Deploy</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   body{font-family:Arial,Helvetica,sans-serif;max-width:980px;margin:18px auto;background:#f7f7f8;color:#202020}
   header{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #ddd;flex-wrap:wrap}
@@ -22,7 +23,7 @@
   .status-bad{color:red}
   pre#adminLogView, pre#ordersView{white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:6px;display:none;max-height:300px;overflow:auto}
   small.note{color:#666}
-  .flex-row{display:flex;gap:8px;align-items:center}
+  .flex-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .muted{color:#666;font-size:90%}
   .order-row{margin:6px 0;padding:6px;border:1px solid #eee;border-radius:6px;background:#fff;display:flex;justify-content:space-between;align-items:center}
   .order-actions button{margin-left:6px}
@@ -30,13 +31,15 @@
   .badge-done{background:#e6ffed;color:#007a3a}
   .badge-deleted{background:#ffecec;color:#9a1c1c}
   .admin-controls button{margin-left:6px}
+  .top-note{font-size:13px;color:#666;margin-top:6px}
 </style>
 </head>
 <body>
 <header>
   <div>
-    <h1>🛒 Durga Pada Das Shopping Site</h1>
+    <h1>🛒 Simple Shopping Site</h1>
     <div id="statusBar">Resolving server...</div>
+    <div class="top-note">Tip: place <code>tunnel.txt</code> beside this page (same origin) to use a tunnel URL.</div>
   </div>
   <div id="userPanel">
     <span id="userInfo">Guest</span>
@@ -120,30 +123,35 @@
 
 <script>
 /*
-  Final shop.html
-  - tunnel-aware (reads tunnel.txt from page origin), fallback to localhost
-  - orders saved to shopping-site/orders/orderN.txt
-  - admin log: shopping-site/admin_log.txt
-  - admin creds: shopping-site/admins.txt (plaintext)
-  - api key internal and never shown
-  - edit & delete items supported (delete actually persists to the server items room)
+  shop.html — final combined
+  - Resolves server from tunnel.txt (same origin) or falls back to http://localhost:8080
+  - Uses internal API key (kept off-page)
+  - Orders saved in server_data/shopping-site/orders/orderN.txt
+  - Robust placeOrder with rollback + fallback
+  - viewOrders normalized and more verbose console errors
+  - Edit/Delete items persist to server (apiPost checks)
 */
 
+// ==== CONFIG ====
 let baseUrl = null;
-const serverKey = "5duM4W8HZiQBSU4v"; // internal only
+// Internal key (kept internal in JS; not printed). Replace if needed.
+const serverKey = "5duM4W8HZiQBSU4v";
+
+// runtime state
 let currentUser = null;
 let cart = {};
 let adminUser = null;
 let adminUnlocked = false;
 
-// utilities
+// ==== UTILITIES ====
 function timeNow(){ const d=new Date(); const pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
 function showStatus(text, ok){ const s=document.getElementById("statusBar"); s.textContent=text; s.className = ok ? "status-ok" : "status-bad"; }
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-// resolve server from tunnel.txt or fallback
+// ==== SERVER RESOLUTION (tunnel.txt) ====
 async function resolveServer(){
   try{
+    // If the page is served via file:// there's no origin; skip reading tunnel.txt
     const origin = (location.protocol === 'file:') ? null : location.origin;
     if(origin){
       const url = origin.replace(/\/$/,'') + '/tunnel.txt';
@@ -151,7 +159,8 @@ async function resolveServer(){
       if(r.ok){
         const text = (await r.text()).trim();
         if(text){
-          try{ const u = new URL(text); return u.origin; }catch(e){ return text.replace(/\/$/,''); }
+          // try to parse as URL; fall back to raw text
+          try{ const u = new URL(text); return u.origin; } catch(e) { return text.replace(/\/$/,''); }
         }
       }
     }
@@ -159,9 +168,7 @@ async function resolveServer(){
   return "http://localhost:8080";
 }
 
-// ---------------- API helpers ----------------
-
-// improved apiPost that returns result metadata and logs details
+// ==== API HELPERS ====
 async function apiPost(room, data){
   try {
     const res = await fetch(`${baseUrl}/room/${room}?key=${encodeURIComponent(serverKey)}`, {
@@ -193,15 +200,22 @@ async function apiGet(room){
 }
 
 async function fetchFile(path){
+  // path: relative like "shopping-site/orders/order1.txt"
   try{
-    return await fetch(`${baseUrl}/file/${encodeURIComponent(path)}?key=${encodeURIComponent(serverKey)}`);
+    const p = encodeURIComponent(path);
+    return await fetch(`${baseUrl}/file/${p}?key=${encodeURIComponent(serverKey)}`);
   }catch(e){ console.error("fetchFile error", e); throw e; }
 }
+
 async function uploadFile(path, blob){
   const form = new FormData();
   form.append("file", blob, path);
-  return fetch(`${baseUrl}/file/${encodeURIComponent(path)}?key=${encodeURIComponent(serverKey)}`, { method: "POST", body: form });
+  try{
+    const p = encodeURIComponent(path);
+    return await fetch(`${baseUrl}/file/${p}?key=${encodeURIComponent(serverKey)}`, { method: "POST", body: form });
+  }catch(e){ console.error("uploadFile error", e); throw e; }
 }
+
 async function listFilesWithPrefix(prefix){
   try{
     const res = await fetch(`${baseUrl}/files?key=${encodeURIComponent(serverKey)}&prefix=${encodeURIComponent(prefix)}`);
@@ -211,7 +225,7 @@ async function listFilesWithPrefix(prefix){
   }catch(e){ console.error("listFilesWithPrefix error", e); return []; }
 }
 
-// ---------------- admin log ----------------
+// ==== ADMIN LOG ====
 async function logAdmin(action){
   if(!adminUser) return;
   const line = `[${timeNow()}] ${adminUser}: ${action}\n`;
@@ -221,14 +235,10 @@ async function logAdmin(action){
     if(r.ok) existing = await r.text();
   }catch(e){}
   const blob = new Blob([existing + line], { type: "text/plain" });
-  try{
-    await uploadFile("shopping-site/admin_log.txt", blob);
-  }catch(e){
-    console.error("logAdmin write failed", e);
-  }
+  try{ await uploadFile("shopping-site/admin_log.txt", blob); } catch(e){ console.error("logAdmin write failed", e); }
 }
 
-// ---------------- login / register ----------------
+// ==== USER LOGIN / REGISTER ====
 async function loginOrRegister(){
   const name = document.getElementById("name").value.trim();
   const phone = document.getElementById("phone").value.trim();
@@ -250,15 +260,9 @@ async function loginOrRegister(){
   updateUserUI();
   await loadItems();
 }
-function logout(){
-  currentUser = null; adminUnlocked = false; adminUser = null;
-  updateUserUI();
-  document.getElementById("adminPanel").style.display = "none";
-  document.getElementById("adminUnlocked").style.display = "none";
-  loadItems();
-}
+function logout(){ currentUser = null; adminUnlocked = false; adminUser = null; updateUserUI(); document.getElementById("adminPanel").style.display = "none"; document.getElementById("adminUnlocked").style.display = "none"; loadItems(); }
 
-// ---------------- admin login ----------------
+// ==== ADMIN LOGIN ====
 async function adminLogin(){
   const user = document.getElementById("adminUser").value.trim();
   const pass = document.getElementById("adminPass").value;
@@ -289,7 +293,7 @@ async function adminLogin(){
   }catch(e){ console.error("adminLogin error", e); alert("Failed to verify admin credentials"); }
 }
 
-// ---------------- items ----------------
+// ==== ITEMS (LIST / SAVE / EDIT / DELETE) ====
 async function loadItems(){
   const items = await apiGet("items");
   const container = document.getElementById("itemList");
@@ -317,7 +321,6 @@ async function loadItems(){
   updateCartUI();
 }
 
-// save item (create or update)
 async function saveItem(){
   if(!adminUnlocked || !adminUser){ alert("Admin required"); return; }
   const idInput = document.getElementById("itemId").value.trim();
@@ -335,11 +338,7 @@ async function saveItem(){
   data[id] = { id, title, price, stock, desc };
 
   const res = await apiPost("items", data);
-  if(!res || !res.ok){
-    alert("Failed to save item on server. See console.");
-    console.error("saveItem apiPost response:", res);
-    return;
-  }
+  if(!res || !res.ok){ alert("Failed to save item on server. See console."); console.error("saveItem apiPost response:", res); return; }
 
   await logAdmin(`${isUpdate ? "Edited" : "Saved"} item "${title}" (id:${id})`);
   alert("Item saved.");
@@ -352,7 +351,6 @@ async function saveItem(){
   await loadItems();
 }
 
-// populate edit form
 function editItemPopulate(id, item){
   if(!adminUnlocked || !adminUser){ alert("Admin required"); return; }
   document.getElementById("itemId").value = id;
@@ -363,7 +361,6 @@ function editItemPopulate(id, item){
   document.getElementById("itemTitle").scrollIntoView({behavior:"smooth", block:"center"});
 }
 
-// delete item (with server save and check)
 async function deleteItem(id){
   if(!adminUnlocked || !adminUser){ alert("Admin required"); return; }
   id = String(id);
@@ -374,17 +371,11 @@ async function deleteItem(id){
   if(!confirm(`Delete item "${title}"? This cannot be undone.`)) return;
   delete data[id];
   const res = await apiPost("items", data);
-  if(!res || !res.ok){
-    console.error("Failed to save updated items after delete:", res);
-    alert("Failed to delete item on server. See console.");
-    await loadItems();
-    return;
-  }
+  if(!res || !res.ok){ console.error("Failed to save updated items after delete:", res); alert("Failed to delete item on server. See console."); await loadItems(); return; }
   await logAdmin(`Deleted item "${title}" (id:${id})`);
   await loadItems();
 }
 
-// render admin list with Edit + Delete
 function renderAdminList(items){
   const list = document.getElementById("adminItemList");
   list.innerHTML = "";
@@ -413,7 +404,7 @@ function renderAdminList(items){
   }
 }
 
-// ---------------- admin log view ----------------
+// ==== ADMIN LOG VIEW ====
 async function viewAdminLog(){
   if(!adminUnlocked || !adminUser){ alert("Admin required"); return; }
   try{
@@ -426,7 +417,7 @@ async function viewAdminLog(){
   }catch(e){ console.error("viewAdminLog error", e); alert("Failed to load admin log"); }
 }
 
-// ---------------- orders (in shopping-site/orders/) ----------------
+// ==== ORDERS (VIEW / MARK DONE / DELETE) ====
 async function viewOrders(){
   if(!adminUnlocked || !adminUser){ alert("Admin required"); return; }
   const listEl = document.getElementById("ordersList");
@@ -434,76 +425,142 @@ async function viewOrders(){
   const filter = document.getElementById("ordersFilter").value;
   listEl.innerHTML = "<small>Loading orders…</small>";
   viewEl.style.display = "none";
+
   try{
-    const files = await listFilesWithPrefix("shopping-site/orders/");
-    if(!files || files.length === 0){ listEl.innerHTML = "<small>No orders found</small>"; return; }
+    const filesRaw = await listFilesWithPrefix("shopping-site/orders/");
+    if(!filesRaw || filesRaw.length === 0){ listEl.innerHTML = "<small>No orders found</small>"; return; }
+
+    // Normalize and sort
+    const files = filesRaw.map(f => f.replace(/^\/+|\/+$/g,""));
     files.sort((a,b)=>{
-      const ra = a.match(/order(\d+)\.txt$/i); const rb = b.match(/order(\d+)\.txt$/i);
-      const na = ra ? parseInt(ra[1],10) : 0; const nb = rb ? parseInt(rb[1],10) : 0; return nb - na;
+      const ra = a.match(/order(\d+)\.txt$/i);
+      const rb = b.match(/order(\d+)\.txt$/i);
+      const na = ra ? parseInt(ra[1],10) : 0;
+      const nb = rb ? parseInt(rb[1],10) : 0;
+      return nb - na;
     });
+
     listEl.innerHTML = "";
+
     for(const f of files){
-      let status = "pending"; let content = "";
-      try{ const res = await fetchFile(f); if(res.ok){ content = await res.text(); if(/STATUS:\s*DONE/i.test(content)) status = "done"; if(/DELETED by/i.test(content)) status = "deleted"; } }catch(e){}
+      let status = "pending";
+      let content = "";
+      try{
+        const res = await fetchFile(f);
+        if(res.ok){
+          content = await res.text();
+          if(/STATUS:\s*DONE/i.test(content)) status = "done";
+          if(/DELETED by/i.test(content)) status = "deleted";
+        } else {
+          // couldn't read — log for debugging
+          console.warn("Cannot read order:", f, res.status);
+        }
+      }catch(e){
+        console.error("Error reading order", f, e);
+      }
+
       if(filter === "done" && status !== "done") continue;
       if(filter === "pending" && status !== "pending") continue;
       if(filter === "deleted" && status !== "deleted") continue;
+
       const row = document.createElement("div"); row.className = "order-row";
       const name = f.split('/').pop();
-      const left = document.createElement("div"); left.innerHTML = `<strong>${escapeHtml(name)}</strong><div class="muted" style="font-size:12px">${escapeHtml(f)}</div>`;
+      const left = document.createElement("div");
+      left.innerHTML = `<strong>${escapeHtml(name)}</strong><div class="muted" style="font-size:12px">${escapeHtml(f)}</div>`;
       const right = document.createElement("div");
       const badge = document.createElement("span");
       badge.className = "badge " + (status==="done" ? "badge-done" : status==="deleted" ? "badge-deleted" : "");
       badge.textContent = status.toUpperCase();
+
       const actions = document.createElement("div"); actions.className = "order-actions";
+      // VIEW
       const viewBtn = document.createElement("button"); viewBtn.textContent = "View";
-      const doneBtn = document.createElement("button"); doneBtn.textContent = "Mark Done";
-      const delBtn = document.createElement("button"); delBtn.textContent = "Delete";
       viewBtn.onclick = async ()=>{
-        try{ const r = await fetchFile(f); if(!r.ok){ alert("Failed to fetch order"); return; } const txt = await r.text(); viewEl.textContent = txt; viewEl.style.display = "block"; }catch(e){ console.error("view order error", e); alert("Failed to fetch order"); }
+        try{
+          const r = await fetchFile(f);
+          if(!r.ok){
+            const body = await r.text().catch(()=>"(no response)");
+            console.error("Cannot read order", f, r.status, body);
+            alert(`Cannot read order file.\nServer returned ${r.status}. See console for details.`);
+            return;
+          }
+          const txt = await r.text();
+          viewEl.textContent = txt;
+          viewEl.style.display = "block";
+        }catch(e){
+          console.error("view order error", f, e);
+          alert("Failed to fetch order file (network or permission issue). See console.");
+        }
       };
+
+      // MARK DONE
+      const doneBtn = document.createElement("button"); doneBtn.textContent = "Mark Done";
       doneBtn.onclick = async ()=>{
         if(status === "done"){ alert("Order already marked done"); return; }
         if(!confirm("Mark this order as DONE?")) return;
         try{
           const r = await fetchFile(f);
-          if(!r.ok){ alert("Cannot read order"); return; }
+          if(!r.ok){
+            const body = await r.text().catch(()=>"(no response)");
+            console.error("MarkDone: cannot read order", f, r.status, body);
+            alert(`Cannot read order (server ${r.status}). See console.`);
+            return;
+          }
           let txt = await r.text();
           txt += `\n\nSTATUS: DONE by ${adminUser} at ${timeNow()}\n`;
           const blob = new Blob([txt], { type: "text/plain" });
           const up = await uploadFile(f, blob);
-          if(!up.ok){ alert("Failed to write done status"); return; }
+          if(!up.ok){
+            const body2 = await up.text().catch(()=>"(no response)");
+            console.error("MarkDone: upload failed", f, up.status, body2);
+            alert("Failed to write done status. See console for details.");
+            return;
+          }
           await logAdmin(`Marked order ${name} as DONE`);
           alert("Order marked done");
           await viewOrders();
-        }catch(e){ console.error("markDone error", e); alert("Failed to mark done"); }
+        }catch(e){ console.error("markDone exception", f, e); alert("Failed to mark done (exception). See console."); }
       };
+
+      // DELETE (overwrite with deleted marker)
+      const delBtn = document.createElement("button"); delBtn.textContent = "Delete";
       delBtn.onclick = async ()=>{
         if(!confirm("Overwrite order file with DELETED marker?")) return;
         try{
           const txt = `DELETED by ${adminUser} at ${timeNow()}\n`;
           const blob = new Blob([txt], { type: "text/plain" });
           const up = await uploadFile(f, blob);
-          if(!up.ok){ alert("Failed to write delete marker"); return; }
+          if(!up.ok){
+            const body3 = await up.text().catch(()=>"(no response)");
+            console.error("Delete order failed", f, up.status, body3);
+            alert("Failed to write delete marker. See console for details.");
+            return;
+          }
           await logAdmin(`Deleted order ${name}`);
           alert("Order deleted (overwritten)");
           await viewOrders();
-        }catch(e){ console.error("deleteOrder error", e); alert("Failed to delete order"); }
+        }catch(e){ console.error("deleteOrder exception", f, e); alert("Failed to delete order (exception). See console."); }
       };
-      actions.appendChild(viewBtn); actions.appendChild(doneBtn); actions.appendChild(delBtn);
-      right.appendChild(badge); right.appendChild(actions);
-      row.appendChild(left); row.appendChild(right); listEl.appendChild(row);
+
+      actions.append(viewBtn, doneBtn, delBtn);
+      right.append(badge, actions);
+      row.append(left, right);
+      listEl.append(row);
     }
-  }catch(e){ console.error("viewOrders error", e); listEl.innerHTML = "<small>Error loading orders</small>"; }
+  }catch(e){
+    console.error("viewOrders main error", e);
+    listEl.innerHTML = "<small>Error loading orders</small>";
+  }
 }
 
-// ---------------- orders helpers ----------------
+// ==== ORDERS HELPERS (next number) ====
 async function getNextOrderNumber(){
   try{
     const files = await listFilesWithPrefix("shopping-site/orders/");
     let maxNum = 0;
     const re = /order(\d+)\.txt$/i;
-    for(const f of files){
+    for(const fRaw of files){
+      const f = fRaw.replace(/^\/+|\/+$/g,"");
       const m = f.match(re);
       if(m && m[1]){
         const digits = m[1];
@@ -518,60 +575,118 @@ async function getNextOrderNumber(){
     return maxNum + 1;
   }catch(e){ console.error("getNextOrderNumber error", e); return Date.now(); }
 }
-async function listFilesWithPrefix(prefix){
-  try{
-    const res = await fetch(`${baseUrl}/files?key=${encodeURIComponent(serverKey)}&prefix=${encodeURIComponent(prefix)}`);
-    if(!res.ok) return [];
-    const j = await res.json();
-    return Array.isArray(j.files) ? j.files : [];
-  }catch(e){ console.error("listFilesWithPrefix", e); return []; }
-}
 
-// ---------------- cart and place order ----------------
+// ==== CART / PLACE ORDER (robust) ====
 function addToCart(id){ cart[id] = (cart[id] || 0) + 1; updateCartUI(); }
 function updateCartUI(){ const ul = document.getElementById("cartList"); ul.innerHTML = ""; for(const [id, qty] of Object.entries(cart)){ const li = document.createElement("li"); li.textContent = `${id} x ${qty}`; ul.appendChild(li); } }
 
 async function placeOrder(){
   if(!currentUser){ alert("Please login first"); return; }
-  const items = await apiGet("items");
-  if(!items || Object.keys(items).length === 0){ alert("No items on server"); return; }
-  let lines = []; let totalCents = 0;
+
+  // 1) read current items
+  const origItems = await apiGet("items");
+  if(!origItems || Object.keys(origItems).length === 0){ alert("No items on server"); return; }
+
+  // 2) validate cart and prepare new items state
+  const newItems = JSON.parse(JSON.stringify(origItems)); // deep clone
+  let lines = [];
+  let totalCents = 0;
+
   for(const [id, qty] of Object.entries(cart)){
-    const it = items[id];
-    if(!it){ alert("Item not found: " + id); return; }
+    const it = newItems[id];
+    if(!it){
+      alert("Item not found: " + id);
+      return;
+    }
     const stock = Number(it.stock || 0);
     const price = Number(it.price || 0);
-    if(stock < qty){ alert(`Not enough stock for "${it.title || id}"`); return; }
+    if(stock < qty){
+      alert(`Not enough stock for "${it.title || id}"`);
+      return;
+    }
     const unitCents = Math.round(price * 100);
     totalCents += unitCents * qty;
     lines.push({ title: it.title || id, qty: qty, unitPrice: price });
-    items[id].stock = stock - qty;
+    newItems[id].stock = stock - qty;
   }
-  const res = await apiPost("items", items);
-  if(!res || !res.ok){ alert("Failed to update item stock on server. Order aborted."); console.error("placeOrder apiPost result:", res); return; }
 
+  // 3) push updated items to server (reserve stock)
+  const saveRes = await apiPost("items", newItems);
+  if(!saveRes || !saveRes.ok){
+    console.error("Failed to update item stock before placing order:", saveRes);
+    alert("Failed to reserve stock on server. Order aborted. See console for details.");
+    return;
+  }
+
+  // 4) build order file contents
   const orderNum = await getNextOrderNumber();
-  const filename = `shopping-site/orders/order${orderNum}.txt`;
+  const filenamePrimary = `shopping-site/orders/order${orderNum}.txt`;
+  const filenameFallback = `shopping-site/order${orderNum}.txt`;
   const isoTime = new Date().toISOString();
   let orderText = `Order: ${orderNum}\nTime: ${isoTime}\nName: ${currentUser.name}\nPhone: ${currentUser.phone}\n\nItems:\n`;
   for(const li of lines) orderText += `- ${li.title} x${li.qty} @ ${Number(li.unitPrice).toFixed(2)}\n`;
   orderText += `\nTotal: ₹${(totalCents/100).toFixed(2)}\n`;
+
   const blob = new Blob([orderText], { type: "text/plain" });
-  try{
-    const up = await uploadFile(filename, blob);
-    if(!up.ok){ alert("Failed to save order file on server"); console.error("upload status", up.status, await up.text().catch(()=>"")); return; }
-  }catch(e){ console.error("order upload failed", e); alert("Failed to upload order"); return; }
-  cart = {}; updateCartUI(); alert(`Order placed: ${filename}`);
+
+  // 5) try primary upload
+  try {
+    let up = await uploadFile(filenamePrimary, blob);
+    if(up && up.ok){
+      cart = {}; updateCartUI();
+      alert(`Order placed: ${filenamePrimary}`);
+      return;
+    }
+
+    // read response body for debug
+    let body = "";
+    try { body = up ? (await up.text()) : "(no response)"; } catch(e){ body = "(couldn't read response body)"; }
+    console.warn("Primary upload failed:", up && up.status, body);
+
+    // 6) try fallback
+    let up2 = await uploadFile(filenameFallback, blob);
+    if(up2 && up2.ok){
+      cart = {}; updateCartUI();
+      alert(`Order placed (fallback): ${filenameFallback}`);
+      return;
+    }
+
+    // fallback also failed — collect body
+    let body2 = "";
+    try { body2 = up2 ? (await up2.text()) : "(no response)"; } catch(e){ body2 = "(couldn't read response body)"; }
+    console.error("Both uploads failed. primary:", up && up.status, body, "fallback:", up2 && up2.status, body2);
+
+    // 7) rollback items to original state
+    const rollback = await apiPost("items", origItems);
+    if(!rollback || !rollback.ok){
+      console.error("Rollback failed — items state may be inconsistent.", rollback);
+      alert("Order failed to save and rollback failed. Check server logs; items may be inconsistent.");
+    } else {
+      alert(`Failed to save order file on server.\nPrimary error: ${up ? up.status : "(no response)"}\n${body}\n\nFallback error: ${up2 ? up2.status : "(no response)"}\n${body2}\n\nStock changes were rolled back.`);
+    }
+
+    return;
+  } catch (err) {
+    console.error("Upload exception:", err);
+    // attempt rollback
+    const rollback = await apiPost("items", origItems);
+    if(!rollback || !rollback.ok){
+      console.error("Rollback failed after upload exception", rollback);
+      alert("Order failed due to upload error and rollback failed. See console.");
+    } else {
+      alert("Order failed due to upload error; stock changes rolled back. See console for details.");
+    }
+    return;
+  }
 }
 
-// ---------------- UI helpers ----------------
+// ==== UI HELPERS & EVENTS ====
 function showLogin(){ document.getElementById("loginModal").style.display = "block"; }
 function hideLogin(){ document.getElementById("loginModal").style.display = "none"; }
 function showAdminLogin(){ document.getElementById("adminModal").style.display = "block"; }
 function hideAdminLogin(){ document.getElementById("adminModal").style.display = "none"; }
 function updateUserUI(){ document.getElementById("userInfo").textContent = currentUser ? currentUser.name : "Guest"; document.getElementById("loginBtn").style.display = currentUser ? "none" : "inline"; document.getElementById("logoutBtn").style.display = currentUser ? "inline" : "none"; }
 
-// ---------------- events wiring ----------------
 document.getElementById("loginBtn").onclick = showLogin;
 document.getElementById("closeModal").onclick = hideLogin;
 document.getElementById("loginSubmit").onclick = loginOrRegister;
@@ -586,7 +701,7 @@ document.getElementById("viewLogsBtn").onclick = viewAdminLog;
 document.getElementById("viewOrdersBtn").onclick = viewOrders;
 document.getElementById("ordersFilter").onchange = viewOrders;
 
-// ---------------- startup ----------------
+// ==== STARTUP ====
 (async function init(){
   baseUrl = await resolveServer();
   showStatus("Server: " + (baseUrl || "unknown"), !!baseUrl);
