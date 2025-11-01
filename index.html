@@ -1,692 +1,688 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Shop — Full Standalone</title>
-  <style>
-    :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial; --accent:#2563eb}
-    body{margin:18px;background:#f3f6fb;color:#111}
-    header{display:flex;align-items:center;justify-content:space-between;gap:12px}
-    h1{font-size:20px;margin:0}
-    .btn{padding:8px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.08);background:#fff;cursor:pointer}
-    .btn-primary{background:var(--accent);color:#fff;border:none}
-    main{display:grid;grid-template-columns:1fr 340px;gap:18px;margin-top:18px}
-    .panel{background:#fff;padding:12px;border-radius:10px;box-shadow:0 1px 0 rgba(0,0,0,0.03)}
-    #products{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
-    .card{padding:12px;border-radius:8px;background:linear-gradient(180deg,#fff,#fbfdff);display:flex;flex-direction:column;gap:8px}
-    .card .title{font-weight:700}
-    .card .price{font-family:monospace}
-    .card .meta{font-size:12px;color:#555}
-    .card .actions{margin-top:auto;display:flex;gap:6px;justify-content:flex-end}
-    #cartItems{display:flex;flex-direction:column;gap:8px}
-    .cart-row{display:flex;gap:8px;align-items:center;justify-content:space-between}
-    .small{font-size:12px;color:#666}
-    .muted{color:#777}
-    label{display:block;font-size:13px;margin-bottom:6px}
-    input[type="text"], input[type="number"], textarea{width:100%;padding:8px;border-radius:6px;border:1px solid #ddd}
-    .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.35)}
-    .modal .panel{width:720px;max-width:96%}
-    .hidden{display:none}
-    .errmsg{color:#b71c1c}
-    .okmsg{color:#056f00}
-    .list-inline{display:flex;gap:8px;flex-wrap:wrap}
-    footer{margin-top:18px;font-size:13px;color:#555}
-    pre{background:#0b1220;color:#bcd;font-size:13px;padding:8px;border-radius:6px;overflow:auto}
-  </style>
+<meta charset="utf-8" />
+<title>Shopping Site — Final Deploy (Updated)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;max-width:980px;margin:18px auto;background:#f7f7f8;color:#202020}
+  header{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #ddd;flex-wrap:wrap}
+  h1{margin:0;font-size:20px}
+  h2,h3{margin:12px 0 8px}
+  .item{background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:12px;margin:10px 0;box-shadow:0 1px 2px rgba(0,0,0,0.03)}
+  button{padding:6px 10px;border-radius:6px;border:1px solid #bdbdbd;background:#fafafa;cursor:pointer}
+  button:disabled{opacity:0.5;cursor:not-allowed}
+  #cartSection{margin-top:18px;padding:12px;background:#fff;border-radius:8px;border:1px solid #e6e6e6}
+  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200}
+  .modal-content{background:#fff;padding:18px;border-radius:8px;width:420px;margin:6% auto}
+  input,textarea,select{display:block;margin:8px 0;padding:8px;width:94%;box-sizing:border-box}
+  #adminPanel{margin-top:20px;padding:12px;background:#fff;border-radius:8px;border:1px solid #e6e6e6}
+  .adminItem{border-bottom:1px solid #f0f0f0;padding:6px 0;display:flex;justify-content:space-between;align-items:center}
+  #statusBar{font-size:13px;color:#555}
+  .status-ok{color:green}
+  .status-bad{color:red}
+  pre#adminLogView, pre#ordersView{white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:6px;display:none;max-height:300px;overflow:auto}
+  small.note{color:#666}
+  .flex-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .muted{color:#666;font-size:90%}
+  .order-row{margin:6px 0;padding:6px;border:1px solid #eee;border-radius:6px;background:#fff;display:flex;justify-content:space-between;align-items:center}
+  .order-actions button{margin-left:6px}
+  .badge{padding:2px 6px;border-radius:4px;font-size:12px}
+  .badge-done{background:#e6ffed;color:#007a3a}
+  .badge-deleted{background:#ffecec;color:#9a1c1c}
+  .admin-controls button{margin-left:6px}
+  .top-note{font-size:13px;color:#666;margin-top:6px}
+  #cartList li{margin:6px 0}
+</style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1>Standalone Shop</h1>
-      <div class="small">Connects to backend at <span id="serverUrlDisplay">http://localhost:8080</span> (reads <code>tunnel.txt</code> if present)</div>
+<header>
+  <div>
+    <h1>🛒 Simple Shopping Site</h1>
+    <div id="statusBar">Resolving server...</div>
+    <div class="top-note">Tip: place <code>tunnel.txt</code> beside this page (same origin) to use a tunnel URL.</div>
+  </div>
+  <div id="userPanel">
+    <span id="userInfo">Guest</span>
+    <button id="loginBtn">Login / Register</button>
+    <button id="adminLoginBtn">Admin Login</button>
+    <button id="logoutBtn" style="display:none">Logout</button>
+  </div>
+</header>
+
+<main>
+  <h2>Products</h2>
+  <div id="itemList"><small class="note">Loading items…</small></div>
+
+  <section id="cartSection">
+    <h3>Your Cart</h3>
+    <ul id="cartList"></ul>
+    <p id="cartTotal" class="muted">Total will be computed at checkout</p>
+    <button id="placeOrderBtn">Place Order</button>
+  </section>
+
+  <section id="adminPanel" style="display:none;">
+    <h3>Admin Panel</h3>
+    <div id="adminUnlocked" style="display:none;">
+      <h4>Add / Update Item</h4>
+      <input id="itemId" placeholder="ID (leave blank to auto)">
+      <input id="itemTitle" placeholder="Title">
+      <input id="itemPrice" placeholder="Price (e.g. 199.99)">
+      <input id="itemStock" placeholder="Stock (integer)">
+      <textarea id="itemDesc" placeholder="Description"></textarea>
+      <div class="flex-row">
+        <button id="saveItemBtn">Save Item</button>
+        <button id="clearEditBtn">Clear</button>
+        <button id="viewLogsBtn">View Admin Log</button>
+        <button id="viewOrdersBtn">View Orders</button>
+        <select id="ordersFilter">
+          <option value="all">All</option>
+          <option value="pending">Pending</option>
+          <option value="done">Done</option>
+          <option value="deleted">Deleted</option>
+        </select>
+      </div>
+      <h4 style="margin-top:12px">Existing Items</h4>
+      <div id="adminItemList"></div>
+
+      <h4 style="margin-top:14px">Admin Log</h4>
+      <pre id="adminLogView"></pre>
+
+      <h4 style="margin-top:14px">Orders</h4>
+      <div id="ordersList"></div>
+      <pre id="ordersView"></pre>
     </div>
-    <div class="list-inline">
-      <button class="btn" id="refreshBtn">Refresh Data</button>
-      <button class="btn" id="viewOrdersBtn">View Orders</button>
-      <button class="btn" id="retryFailedBtn">Retry Failed Orders</button>
-    </div>
-  </header>
+  </section>
+</main>
 
-  <main>
-    <section class="panel">
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <strong>Products</strong>
-        <div class="small muted">Edit / Delete update local copy or call API when available</div>
-      </div>
-
-      <div id="products" style="margin-top:12px">
-        <!-- product cards will render here -->
-      </div>
-
-      <hr style="margin:14px 0" />
-
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="btn btn-primary" id="newItemBtn">New Item</button>
-        <div class="small muted">Edits may be sent to <code>/api/items</code> if available; otherwise stored locally.</div>
-      </div>
-    </section>
-
-    <aside class="panel">
-      <strong>Cart</strong>
-      <div id="cartItems" style="margin-top:8px"></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
-        <div class="small">Total: <span id="cartTotal">0.00</span></div>
-        <button class="btn btn-primary" id="checkoutBtn">Place Order</button>
-      </div>
-
-      <hr style="margin:12px 0" />
-      <div>
-        <strong>Status</strong>
-        <div id="status" class="small" style="margin-top:6px;">Ready</div>
-      </div>
-
-      <hr style="margin:12px 0" />
-      <div>
-        <strong>Orders (Preview)</strong>
-        <div id="ordersPreview" class="small muted" style="margin-top:8px">Click "View Orders" to load.</div>
-      </div>
-    </aside>
-  </main>
-
-  <footer>
-    <div class="small">Notes: The page tries multiple fallbacks (API → static files → localStorage). Edit/delete actions first attempt standard REST endpoints and gracefully degrade when unavailable.</div>
-  </footer>
-
-  <!-- Edit / New Item Modal -->
-  <div id="itemModal" class="modal hidden" aria-hidden="true">
-    <div class="panel">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <strong id="modalTitle">New Item</strong>
-        <div><button class="btn" id="closeModalBtn">Close</button></div>
-      </div>
-      <div style="margin-top:12px">
-        <label>Title<input id="itemTitle" type="text" /></label>
-        <label>Description<textarea id="itemDesc" rows="3"></textarea></label>
-        <label>Price<input id="itemPrice" type="number" step="0.01" /></label>
-        <label>Image URL (optional)<input id="itemImage" type="text" /></label>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <button class="btn btn-primary" id="saveItemBtn">Save Item</button>
-          <button class="btn" id="cancelItemBtn">Cancel</button>
-        </div>
-        <div id="itemModalMsg" class="small" style="margin-top:8px"></div>
-      </div>
+<!-- User modal -->
+<div id="loginModal" class="modal">
+  <div class="modal-content">
+    <h3>Login / Register</h3>
+    <input id="name" placeholder="Full name (for register)">
+    <input id="phone" placeholder="Phone (digits only)">
+    <input id="password" type="password" placeholder="Password">
+    <div style="text-align:right;margin-top:8px">
+      <button id="loginSubmit">Submit</button>
+      <button id="closeModal">Close</button>
     </div>
   </div>
+</div>
 
-  <!-- Orders Viewer Modal -->
-  <div id="ordersModal" class="modal hidden" aria-hidden="true">
-    <div class="panel" style="max-height:80vh;overflow:auto">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <strong>Orders</strong>
-        <div><button class="btn" id="closeOrdersBtn">Close</button></div>
-      </div>
-      <div id="ordersList" style="margin-top:12px"></div>
+<!-- Admin modal -->
+<div id="adminModal" class="modal">
+  <div class="modal-content">
+    <h3>Admin Login</h3>
+    <input id="adminUser" placeholder="Admin username">
+    <input id="adminPass" type="password" placeholder="Admin password">
+    <div style="text-align:right;margin-top:8px">
+      <button id="adminLoginSubmit">Login</button>
+      <button id="closeAdminModal">Close</button>
     </div>
   </div>
+</div>
 
 <script>
-/*
-  shop.html
-  - Reads server URL from tunnel.txt (if present), else uses http://localhost:8080
-  - Loads items from server: tries API (/api/items), then /items.json, then localStorage fallback
-  - Allows Add/Edit/Delete: uses API endpoints if available; otherwise modifies local copy and saves to localStorage
-  - Cart + Place Order: tries POST /api/orders, then tries POST to /orders/order<ID>.txt (text fallback), then saves failed orders locally for retry
-  - View Orders: tries /api/orders, then /orders/index.json, then probes /orders/orderN.txt (HEAD) up to a configurable limit
+/* Improved shop.html
+   - Robust fetchFile fallback (tries /file/<path>?key=..., then direct URL baseUrl + '/' + path)
+   - Cart shows product titles + computed total
+   - Better getNextOrderNumber and safer upload handling
+   - Keeps admin log and uploadFile endpoints intact
 */
 
-const DEFAULT_SERVER = 'http://localhost:8080';
-const TUNNEL_TXT = 'tunnel.txt';
-const ITEMS_JSON = '/items.json';
-const API_ITEMS = '/api/items';
-const API_ORDERS = '/api/orders';
-const ORDERS_FOLDER = '/orders';
-const PROBE_MAX = 100;
+// ==== CONFIG ====
+let baseUrl = null;
+const serverKey = "5duM4W8HZiQBSU4v"; // keep secret in server ideally
+let currentUser = null;
+let cart = {};           // { id: qty }
+let adminUser = null;
+let adminUnlocked = false;
 
-let SERVER_URL = DEFAULT_SERVER;
-const serverUrlDisplay = document.getElementById('serverUrlDisplay');
-const productsEl = document.getElementById('products');
-const statusEl = document.getElementById('status');
-const cartItemsEl = document.getElementById('cartItems');
-const cartTotalEl = document.getElementById('cartTotal');
-const ordersPreviewEl = document.getElementById('ordersPreview');
-const ordersListEl = document.getElementById('ordersList');
+// DOM refs
+const statusBar = document.getElementById('statusBar');
+const itemList = document.getElementById('itemList');
+const cartList = document.getElementById('cartList');
+const cartTotal = document.getElementById('cartTotal');
 
-const refreshBtn = document.getElementById('refreshBtn');
-const viewOrdersBtn = document.getElementById('viewOrdersBtn');
-const retryFailedBtn = document.getElementById('retryFailedBtn');
+// helpers
+function showStatus(text, ok){ statusBar.textContent = text; statusBar.className = ok ? "status-ok" : "status-bad"; }
+function timeNow(){ const d=new Date(); const pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-const itemModal = document.getElementById('itemModal');
-const modalTitle = document.getElementById('modalTitle');
-const itemTitle = document.getElementById('itemTitle');
-const itemDesc = document.getElementById('itemDesc');
-const itemPrice = document.getElementById('itemPrice');
-const itemImage = document.getElementById('itemImage');
-const saveItemBtn = document.getElementById('saveItemBtn');
-const closeModalBtn = document.getElementById('closeModalBtn');
-const cancelItemBtn = document.getElementById('cancelItemBtn');
-const itemModalMsg = document.getElementById('itemModalMsg');
-const newItemBtn = document.getElementById('newItemBtn');
-
-const ordersModal = document.getElementById('ordersModal');
-const closeOrdersBtn = document.getElementById('closeOrdersBtn');
-
-let items = [];        // current in-memory items
-let cart = {};         // { itemId: qty }
-let editingItemId = null;
-
-const localItemsKey = 'shop_items_v1';
-const failedOrdersKey = 'shop_failed_orders_v1';
-
-// init
-(async function init(){
-  SERVER_URL = await getServerUrl();
-  serverUrlDisplay.textContent = SERVER_URL;
-  attachEventListeners();
-  await loadItemsAndRender();
-  renderCart();
-})();
-
-function attachEventListeners(){
-  refreshBtn.addEventListener('click', async ()=> {
-    setStatus('Refreshing...');
-    await loadItemsAndRender(true);
-    setStatus('Refreshed');
-  });
-
-  newItemBtn.addEventListener('click', ()=> openItemModal());
-  closeModalBtn.addEventListener('click', closeItemModal);
-  cancelItemBtn.addEventListener('click', closeItemModal);
-  saveItemBtn.addEventListener('click', saveItemFromModal);
-
-  checkoutBtn = document.getElementById('checkoutBtn');
-  checkoutBtn.addEventListener('click', placeOrder);
-
-  viewOrdersBtn.addEventListener('click', async ()=> {
-    ordersModal.classList.remove('hidden');
-    ordersModal.setAttribute('aria-hidden','false');
-    await viewOrders();
-  });
-  closeOrdersBtn.addEventListener('click', ()=> {
-    ordersModal.classList.add('hidden');
-    ordersModal.setAttribute('aria-hidden','true');
-  });
-
-  retryFailedBtn.addEventListener('click', ()=> retryFailedOrders());
-  window.addEventListener('keydown', (e)=> {
-    if (e.key === 'Escape') {
-      closeItemModal();
-      ordersModal.classList.add('hidden');
-    }
-  });
-}
-
-function setStatus(msg, isError=false){
-  statusEl.textContent = msg;
-  statusEl.className = isError ? 'small errmsg' : 'small';
-}
-
-// read tunnel.txt if exists
-async function getServerUrl(){
-  try {
-    const res = await fetch(TUNNEL_TXT, {cache:'no-store'});
-    if (!res.ok) return DEFAULT_SERVER;
-    const txt = (await res.text()).trim();
-    if (!txt) return DEFAULT_SERVER;
-    // allow full URL or path
-    return txt.startsWith('http') ? txt.replace(/\/$/,'') : txt.replace(/\/$/,'');
-  } catch(e){
-    // network error or file missing -> fallback
-    return DEFAULT_SERVER;
-  }
-}
-
-/* ---------- Items loading / saving ---------- */
-
-async function loadItemsAndRender(forceApi=false){
-  // 1) try API
-  if (!forceApi){
-    const api = await tryApiGetItems();
-    if (api) { items = api; renderProducts(); return; }
-  }
-
-  // 2) try static items.json at root of server
-  try {
-    const res = await fetch(`${SERVER_URL}${ITEMS_JSON}`, {cache:'no-store'});
-    if (res.ok) {
-      const json = await res.json();
-      if (Array.isArray(json)) { items = json; saveLocalItemsCopy(); renderProducts(); return; }
-    }
-  } catch(e){ /* ignore */ }
-
-  // 3) local storage fallback
-  const local = localStorage.getItem(localItemsKey);
-  if (local){
-    try { items = JSON.parse(local); renderProducts(); return; } catch(e){}
-  }
-
-  // 4) bundled default items
-  items = [
-    { id: generateId(), title: 'Example Widget', price: 9.99, description: 'A sample product', image: '' },
-    { id: generateId(), title: 'Sample Pack', price: 19.5, description: 'Two for the price of one', image: '' }
-  ];
-  saveLocalItemsCopy();
-  renderProducts();
-}
-
-async function tryApiGetItems(){
-  try {
-    const res = await fetch(`${SERVER_URL}${API_ITEMS}`, {cache:'no-store'});
-    if (!res.ok) return null;
-    const json = await res.json();
-    if (Array.isArray(json)) return json;
-    if (Array.isArray(json.items)) return json.items;
-    return null;
-  } catch(e){ return null; }
-}
-
-function saveLocalItemsCopy(){
-  try { localStorage.setItem(localItemsKey, JSON.stringify(items)); } catch(e){}
-}
-
-/* ---------- Render products ---------- */
-
-function renderProducts(){
-  productsEl.innerHTML = '';
-  if (!items || items.length === 0){
-    productsEl.innerHTML = '<div class="small muted">No products available.</div>';
-    return;
-  }
-  items.forEach(it => {
-    const card = document.createElement('div');
-    card.className = 'card';
-    const img = document.createElement('div');
-    img.style.minHeight = '60px';
-    img.style.display = 'flex';
-    img.style.alignItems = 'center';
-    img.style.justifyContent = 'center';
-    if (it.image){
-      const im = document.createElement('img');
-      im.src = it.image; im.alt = it.title; im.style.maxWidth='100%'; im.style.maxHeight='80px';
-      img.appendChild(im);
-    } else {
-      img.textContent = 'Image';
-      img.className = 'small muted';
-      img.style.border='1px dashed #e6eefc'; img.style.borderRadius='6px';
-      img.style.padding='8px';
-    }
-    const title = document.createElement('div'); title.className = 'title'; title.textContent = it.title;
-    const desc = document.createElement('div'); desc.className = 'meta'; desc.textContent = it.description || '';
-    const price = document.createElement('div'); price.className = 'price'; price.textContent = `₹ ${Number(it.price).toFixed(2)}`;
-
-    const actions = document.createElement('div'); actions.className = 'actions';
-    const addBtn = document.createElement('button'); addBtn.className='btn'; addBtn.textContent='Add';
-    addBtn.addEventListener('click', ()=> addToCart(it.id));
-    const editBtn = document.createElement('button'); editBtn.className='btn'; editBtn.textContent='Edit';
-    editBtn.addEventListener('click', ()=> openItemModal(it.id));
-    const delBtn = document.createElement('button'); delBtn.className='btn'; delBtn.textContent='Delete';
-    delBtn.addEventListener('click', ()=> deleteItem(it.id, card));
-
-    actions.appendChild(addBtn);
-    actions.appendChild(editBtn);
-    actions.appendChild(delBtn);
-
-    card.appendChild(img);
-    card.appendChild(title);
-    card.appendChild(desc);
-    card.appendChild(price);
-    card.appendChild(actions);
-    productsEl.appendChild(card);
-  });
-}
-
-/* ---------- Cart ---------- */
-
-function addToCart(itemId){
-  cart[itemId] = (cart[itemId] || 0) + 1;
-  renderCart();
-  setStatus('Added to cart');
-}
-
-function renderCart(){
-  cartItemsEl.innerHTML = '';
-  let total = 0;
-  const rows = [];
-  for (const id of Object.keys(cart)){
-    const qty = cart[id];
-    const it = items.find(x=>x.id===id);
-    if (!it) continue;
-    total += (Number(it.price) || 0) * qty;
-
-    const row = document.createElement('div'); row.className='cart-row';
-    const left = document.createElement('div'); left.textContent = `${it.title} × ${qty}`;
-    const right = document.createElement('div'); 
-    const minus = document.createElement('button'); minus.className='btn'; minus.textContent='−';
-    minus.addEventListener('click', ()=> { changeQty(id, Math.max(0, qty-1)); });
-    const plus = document.createElement('button'); plus.className='btn'; plus.textContent='+';
-    plus.addEventListener('click', ()=> { changeQty(id, qty+1); });
-    const remove = document.createElement('button'); remove.className='btn'; remove.textContent='Remove';
-    remove.addEventListener('click', ()=> { changeQty(id, 0); });
-    right.appendChild(minus); right.appendChild(plus); right.appendChild(remove);
-    row.appendChild(left); row.appendChild(right);
-    cartItemsEl.appendChild(row);
-  }
-  cartTotalEl.textContent = Number(total).toFixed(2);
-}
-
-function changeQty(id, qty){
-  if (qty <= 0) delete cart[id];
-  else cart[id] = qty;
-  renderCart();
-}
-
-/* ---------- Item modal (add/edit) ---------- */
-
-function openItemModal(id=null){
-  editingItemId = id;
-  if (id){
-    modalTitle.textContent = 'Edit Item';
-    const it = items.find(x=>x.id===id);
-    if (!it) { setStatus('Item not found', true); return; }
-    itemTitle.value = it.title || '';
-    itemDesc.value = it.description || '';
-    itemPrice.value = Number(it.price || 0);
-    itemImage.value = it.image || '';
-  } else {
-    modalTitle.textContent = 'New Item';
-    itemTitle.value = ''; itemDesc.value=''; itemPrice.value=''; itemImage.value='';
-  }
-  itemModal.classList.remove('hidden');
-  itemModal.setAttribute('aria-hidden','false');
-}
-
-function closeItemModal(){
-  itemModal.classList.add('hidden');
-  itemModal.setAttribute('aria-hidden','true');
-  itemModalMsg.textContent = '';
-  editingItemId = null;
-}
-
-async function saveItemFromModal(){
-  const title = itemTitle.value.trim();
-  const desc = itemDesc.value.trim();
-  const price = Number(itemPrice.value || 0);
-  const image = itemImage.value.trim();
-  if (!title) { itemModalMsg.textContent = 'Title required'; itemModalMsg.className='errmsg'; return; }
-
-  if (editingItemId){
-    // update existing
-    const idx = items.findIndex(x=>x.id===editingItemId);
-    if (idx === -1) { itemModalMsg.textContent='Item gone'; itemModalMsg.className='errmsg'; return; }
-    items[idx] = { ...items[idx], title, description: desc, price, image };
-    // try to update via API first
-    const ok = await tryApiSaveItems(items);
-    if (ok) { itemModalMsg.textContent='Saved to server'; itemModalMsg.className='okmsg'; closeItemModal(); renderProducts(); saveLocalItemsCopy(); return; }
-    // fallback: save locally
-    saveLocalItemsCopy();
-    renderProducts();
-    itemModalMsg.textContent='Saved locally (server unavailable)';
-    itemModalMsg.className='small muted';
-    setTimeout(closeItemModal, 800);
-    return;
-  } else {
-    // new item
-    const newItem = { id: generateId(), title, description: desc, price, image };
-    items.push(newItem);
-    const ok = await tryApiSaveItems(items);
-    if (ok) { itemModalMsg.textContent='Saved to server'; itemModalMsg.className='okmsg'; closeItemModal(); renderProducts(); saveLocalItemsCopy(); return; }
-    saveLocalItemsCopy();
-    renderProducts();
-    itemModalMsg.textContent='Saved locally (server unavailable)';
-    itemModalMsg.className='small muted';
-    setTimeout(closeItemModal, 800);
-    return;
-  }
-}
-
-// attempt to save items array via API (PUT or POST) - many servers won't accept this, but we try
-async function tryApiSaveItems(arr){
-  try {
-    // Try a PUT to /api/items (server expected to implement it)
-    const res = await fetch(`${SERVER_URL}${API_ITEMS}`, {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(arr)
-    });
-    if (res.ok) return true;
-    // try POST as alternative
-    const res2 = await fetch(`${SERVER_URL}${API_ITEMS}`, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(arr)
-    });
-    if (res2.ok) return true;
-    return false;
-  } catch(e){
-    return false;
-  }
-}
-
-async function deleteItem(id, cardEl){
-  if (!confirm('Delete this item?')) return;
-  // remove locally first
-  const idx = items.findIndex(x=>x.id===id);
-  if (idx === -1) { setStatus('Item not found', true); return; }
-  const removed = items.splice(idx,1);
-  renderProducts(); saveLocalItemsCopy();
-  setStatus('Item removed locally');
-  // try to delete via API
-  try {
-    const res = await fetch(`${SERVER_URL}${API_ITEMS}/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (res.ok) { setStatus('Item removed on server'); return; }
-    // otherwise try saving full items array
-    await tryApiSaveItems(items);
-  } catch(e){}
-}
-
-/* ---------- Place order ---------- */
-
-async function placeOrder(){
-  if (Object.keys(cart).length === 0) { setStatus('Cart is empty', true); return; }
-  const order = {
-    id: 'order-' + Date.now(),
-    created: new Date().toISOString(),
-    items: [],
-    total: Number(cartTotalEl.textContent) || 0
-  };
-  for (const id of Object.keys(cart)){
-    const it = items.find(x=>x.id===id);
-    if (!it) continue;
-    order.items.push({ id: it.id, title: it.title, qty: cart[id], price: it.price });
-  }
-
-  setStatus('Placing order...');
-  try {
-    // Primary: try JSON API
-    const res = await fetch(`${SERVER_URL}${API_ORDERS}`, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(order)
-    });
-    if (res.ok) {
-      setStatus('Order placed successfully');
-      cart = {}; renderCart();
-      return;
-    }
-    // If API not available, try fallback: write a text file into /orders/ as order<ID>.txt
-    const orderText = orderToText(order);
-    const filename = `${order.id}.txt`;
-    // try POST to /orders/filename (some servers accept such writes)
-    const res2 = await fetch(`${SERVER_URL}${ORDERS_FOLDER}/${encodeURIComponent(filename)}`, {
-      method: 'POST',
-      headers: {'Content-Type':'text/plain'},
-      body: orderText
-    });
-    if (res2.ok || res2.status === 201) {
-      setStatus('Order saved to orders folder (server accepted write)');
-      cart = {}; renderCart();
-      return;
-    }
-    // If both attempts fail, store locally to retry
-    stashFailedOrder(order);
-    setStatus('Order could not be saved to server — kept locally and will retry when you click "Retry Failed Orders".', true);
-  } catch(e){
-    stashFailedOrder(order);
-    setStatus('Network error while placing order — saved locally for retry: ' + e.message, true);
-  }
-}
-
-function orderToText(order){
-  const lines = [];
-  lines.push(`Order ID: ${order.id}`);
-  lines.push(`Created: ${order.created}`);
-  lines.push('');
-  lines.push('Items:');
-  for (const it of order.items) lines.push(` - ${it.title} × ${it.qty} @ ${it.price}`);
-  lines.push('');
-  lines.push(`Total: ${order.total}`);
-  return lines.join('\n');
-}
-
-function stashFailedOrder(order){
-  const list = JSON.parse(localStorage.getItem(failedOrdersKey) || '[]');
-  list.push(order);
-  localStorage.setItem(failedOrdersKey, JSON.stringify(list));
-}
-
-/* ---------- Retry failed orders ---------- */
-
-async function retryFailedOrders(){
-  const list = JSON.parse(localStorage.getItem(failedOrdersKey) || '[]');
-  if (!list || list.length === 0) { setStatus('No failed orders to retry'); return; }
-  setStatus(`Retrying ${list.length} failed order(s)...`);
-  const remaining = [];
-  for (const order of list){
-    try {
-      const res = await fetch(`${SERVER_URL}${API_ORDERS}`, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(order)
-      });
-      if (res.ok) {
-        // ok
-        continue;
+// ==== Server resolution ====
+async function resolveServer(){
+  try{
+    const origin = (location.protocol === 'file:') ? null : location.origin;
+    if(origin){
+      const url = origin.replace(/\/$/,'') + '/tunnel.txt';
+      const r = await fetch(url, {cache:"no-store"});
+      if(r.ok){
+        const text = (await r.text()).trim();
+        if(text){
+          try{ const u = new URL(text); return u.origin; } catch(e){ return text.replace(/\/$/,''); }
+        }
       }
-      // try orders folder text post
-      const filename = `${order.id}.txt`;
-      const res2 = await fetch(`${SERVER_URL}${ORDERS_FOLDER}/${encodeURIComponent(filename)}`, {
-        method: 'POST',
-        headers: {'Content-Type':'text/plain'},
-        body: orderToText(order)
-      });
-      if (res2.ok || res2.status === 201) continue;
-      // failed -> keep
-      remaining.push(order);
-    } catch(e){
-      remaining.push(order);
     }
-  }
-  localStorage.setItem(failedOrdersKey, JSON.stringify(remaining));
-  if (remaining.length === 0) {
-    setStatus('All failed orders retried and sent successfully');
-  } else {
-    setStatus(`${remaining.length} order(s) still failed — saved locally`, true);
+  }catch(e){}
+  return "http://localhost:8080";
+}
+
+// ==== low-level API helpers (room/file/files as in your server) ====
+async function apiPost(room, data){
+  try {
+    const url = `${baseUrl}/room/${room}?key=${encodeURIComponent(serverKey)}`;
+    const res = await fetch(url, { method:'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    if(!res.ok){ const txt = await res.text().catch(()=>''); console.error('apiPost failed', res.status, txt); return {ok:false, status:res.status, text:txt}; }
+    let json = null; try{ json = await res.json(); }catch(e){ json=null; }
+    return { ok:true, status:res.status, json };
+  } catch(e){ console.error('apiPost error', e); return { ok:false, error:e }; }
+}
+
+async function apiGet(room){
+  try {
+    const url = `${baseUrl}/room/${room}?key=${encodeURIComponent(serverKey)}`;
+    const res = await fetch(url);
+    if(!res.ok) return {};
+    const j = await res.json();
+    return j.data || {};
+  } catch(e){ console.error('apiGet error', e); return {}; }
+}
+
+// Try to fetch file through your /file/ endpoint first; fallback to direct static URL (baseUrl + '/' + path)
+async function fetchFile(path){
+  // path is something like "shopping-site/orders/order1.txt"
+  // try server's /file/<encodedPath>?key=...
+  try {
+    const p1 = encodeURIComponent(path);
+    const url1 = `${baseUrl}/file/${p1}?key=${encodeURIComponent(serverKey)}`;
+    let res = await fetch(url1);
+    if(res.ok) return res;
+    // fallback: try direct static path
+    const url2 = `${baseUrl.replace(/\/$/,'')}/${path.replace(/^\/+/,'')}`;
+    res = await fetch(url2);
+    if(res.ok) return res;
+    // another fallback: try with "shopping-site/" prefix removed for older structure
+    const last = path.split('/').pop();
+    const url3 = `${baseUrl.replace(/\/$/,'')}/${last}`;
+    res = await fetch(url3);
+    return res; // return even if not ok for caller to inspect status
+  } catch(e){
+    console.error('fetchFile error', e);
+    throw e;
   }
 }
 
-/* ---------- View Orders (preview) ---------- */
-
-async function viewOrders(){
-  ordersListEl.innerHTML = 'Loading orders...';
-  // 1) API
-  try {
-    const res = await fetch(`${SERVER_URL}${API_ORDERS}`, {cache:'no-store'});
-    if (res.ok) {
-      const json = await res.json();
-      const files = Array.isArray(json) ? json : (Array.isArray(json.files) ? json.files : json.orders || []);
-      renderOrdersList(files);
-      return;
-    }
-  } catch(e){ /* ignore */ }
-
-  // 2) try /orders/index.json
-  try {
-    const res2 = await fetch(`${SERVER_URL}${ORDERS_FOLDER}/index.json`, {cache:'no-store'});
-    if (res2.ok){
-      const json = await res2.json();
-      const files = Array.isArray(json) ? json : (Array.isArray(json.files) ? json.files : []);
-      renderOrdersList(files);
-      return;
-    }
-  } catch(e){}
-
-  // 3) fallback: probe order1..orderN with HEAD
-  const found = [];
-  for (let i=1;i<=PROBE_MAX;i++){
-    const name = `order${i}.txt`;
+async function uploadFile(path, blob){
+  // try /file/<encodedPath>?key=... with multipart form data
+  try{
+    const form = new FormData();
+    form.append('file', blob, path.split('/').pop() || 'upload.txt');
+    const p1 = encodeURIComponent(path);
+    const url1 = `${baseUrl}/file/${p1}?key=${encodeURIComponent(serverKey)}`;
+    let res = await fetch(url1, { method:'POST', body: form });
+    if(res.ok) return res;
+    // fallback: try PUT to direct path if supported (some servers may accept)
     try {
-      const res = await fetch(`${SERVER_URL}${ORDERS_FOLDER}/${encodeURIComponent(name)}`, { method: 'HEAD', cache: 'no-store' });
-      if (res.ok) found.push(name);
+      const url2 = `${baseUrl.replace(/\/$/,'')}/${path.replace(/^\/+/,'')}`;
+      res = await fetch(url2, { method:'PUT', body: blob, headers: { 'Content-Type':'text/plain' } });
+      return res;
     } catch(e){}
+    return res;
+  } catch(e){
+    console.error('uploadFile error', e);
+    throw e;
   }
-  renderOrdersList(found);
 }
 
-function renderOrdersList(files){
-  ordersListEl.innerHTML = '';
-  if (!files || files.length === 0){
-    ordersListEl.innerHTML = '<div class="small muted">No orders found.</div>';
+async function listFilesWithPrefix(prefix){
+  // Try server endpoint /files?prefix=...
+  try{
+    const u = `${baseUrl}/files?key=${encodeURIComponent(serverKey)}&prefix=${encodeURIComponent(prefix)}`;
+    const r = await fetch(u);
+    if(r.ok){
+      const j = await r.json();
+      if(Array.isArray(j.files)) return j.files;
+    }
+  }catch(e){ console.warn('listFilesWithPrefix primary failed', e); }
+  // Fallback: try an index file at prefix/index.json
+  try{
+    const idxUrl = `${baseUrl.replace(/\/$/,'')}/${prefix.replace(/\/$/,'')}/index.json`;
+    const r2 = await fetch(idxUrl);
+    if(r2.ok){
+      const j2 = await r2.json();
+      if(Array.isArray(j2)) return j2;
+      if(Array.isArray(j2.files)) return j2.files;
+    }
+  }catch(e){}
+  return [];
+}
+
+// ==== admin logging ====
+async function logAdmin(action){
+  if(!adminUser) return;
+  const line = `[${timeNow()}] ${adminUser}: ${action}\n`;
+  // append to admin_log.txt
+  try{
+    let existing = '';
+    try {
+      const r = await fetchFile('shopping-site/admin_log.txt');
+      if(r && r.ok) existing = await r.text();
+    } catch(e){}
+    const blob = new Blob([existing + line], { type:'text/plain' });
+    await uploadFile('shopping-site/admin_log.txt', blob);
+  } catch(e){ console.error('logAdmin write failed', e); }
+}
+
+// ==== auth ====
+async function loginOrRegister(){
+  const name = document.getElementById("name").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+  const pass = document.getElementById("password").value;
+  if(!phone || !pass){ alert('Enter phone and password'); return; }
+  let accounts = await apiGet('accounts');
+  if(!accounts || typeof accounts !== 'object') accounts = {};
+  if(!accounts[phone]){
+    accounts[phone] = { name: name || phone, phone, password: pass, role: 'user' };
+    const res = await apiPost('accounts', accounts);
+    if(!res || !res.ok){ alert('Failed to create account'); return; }
+    alert('Account created & logged in');
+  } else {
+    if(accounts[phone].password !== pass){ alert('Wrong password'); return; }
+    alert('Logged in');
+  }
+  currentUser = accounts[phone];
+  hideLogin();
+  updateUserUI();
+  await loadItems();
+}
+function logout(){ currentUser = null; adminUnlocked = false; adminUser = null; updateUserUI(); document.getElementById('adminPanel').style.display='none'; document.getElementById('adminUnlocked').style.display='none'; loadItems(); }
+async function adminLogin(){
+  const user = document.getElementById("adminUser").value.trim();
+  const pass = document.getElementById("adminPass").value;
+  if(!user || !pass){ alert('Enter both fields'); return; }
+  try{
+    const r = await fetchFile('shopping-site/admins.txt');
+    if(!r || !r.ok){ alert('Cannot access admins.txt'); return; }
+    const text = await r.text();
+    const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+    let ok = false;
+    for(const line of lines){
+      const parts = line.split(':');
+      if(parts.length >= 2){
+        const u = parts.shift();
+        const p = parts.join(':');
+        if(u===user && p===pass){ ok = true; break; }
+      }
+    }
+    if(ok){
+      adminUser = user; adminUnlocked = true;
+      document.getElementById('adminPanel').style.display='block';
+      document.getElementById('adminUnlocked').style.display='block';
+      hideAdminLogin();
+      alert('Admin authenticated');
+      await logAdmin('Logged in');
+      await loadItems();
+    } else alert('Invalid admin credentials');
+  }catch(e){ console.error('adminLogin error', e); alert('Failed to verify admin credentials'); }
+}
+
+// ==== items ====
+async function loadItems(){
+  const items = await apiGet('items');
+  itemList.innerHTML = '';
+  if(!items || Object.keys(items).length === 0){
+    itemList.innerHTML = '<small>No items available.</small>';
+  } else {
+    for(const it of Object.values(items)){
+      const el = document.createElement('div');
+      el.className = 'item';
+      const priceNum = (typeof it.price === 'number') ? it.price : parseFloat(it.price || 0);
+      const priceStr = Number.isFinite(priceNum) ? priceNum.toFixed(2) : '0.00';
+      el.innerHTML = `<strong>${escapeHtml(it.title)}</strong> — ₹${priceStr}<br/>
+                      <div style="margin-top:6px">${escapeHtml(it.desc || '')}</div>
+                      <div style="margin-top:8px">Stock: ${Number(it.stock || 0)}</div>
+                      <div style="margin-top:8px">
+                        <button ${!currentUser || (Number(it.stock||0) <= 0) ? 'disabled' : ''} data-id="${escapeHtml(it.id)}">Add to Cart</button>
+                      </div>`;
+      const btn = el.querySelector('button');
+      btn.addEventListener('click', ()=> addToCart(String(it.id)));
+      itemList.appendChild(el);
+    }
+  }
+  if(adminUnlocked) renderAdminList(items);
+  updateCartUI();
+}
+
+async function saveItem(){
+  if(!adminUnlocked || !adminUser){ alert('Admin required'); return; }
+  const idInput = document.getElementById('itemId').value.trim();
+  const title = document.getElementById('itemTitle').value.trim();
+  const price = parseFloat(document.getElementById('itemPrice').value.trim() || '0');
+  const stock = parseInt(document.getElementById('itemStock').value.trim() || '0');
+  const desc = document.getElementById('itemDesc').value.trim();
+  if(!title){ alert('Title required'); return; }
+
+  let data = await apiGet('items');
+  if(!data || typeof data !== 'object') data = {};
+  const id = idInput || String(Date.now());
+  const isUpdate = Object.prototype.hasOwnProperty.call(data, id);
+  data[id] = { id, title, price, stock, desc };
+
+  const res = await apiPost('items', data);
+  if(!res || !res.ok){ alert('Failed to save item on server. See console.'); console.error('saveItem apiPost response:', res); return; }
+  await logAdmin(`${isUpdate ? 'Edited' : 'Saved'} item "${title}" (id:${id})`);
+  alert('Item saved.');
+  document.getElementById('itemId').value=''; document.getElementById('itemTitle').value=''; document.getElementById('itemPrice').value=''; document.getElementById('itemStock').value=''; document.getElementById('itemDesc').value='';
+  await loadItems();
+}
+
+function renderAdminList(items){
+  const list = document.getElementById('adminItemList');
+  list.innerHTML = '';
+  if(!items || Object.keys(items).length === 0){ list.innerHTML = '<small>No items</small>'; return; }
+  for(const it of Object.values(items)){
+    const id = String(it.id);
+    const d = document.createElement('div');
+    d.className = 'adminItem';
+    const left = document.createElement('div');
+    left.innerHTML = `<strong>${escapeHtml(it.title)}</strong> — ₹${(Number(it.price)||0).toFixed(2)} (stock: ${Number(it.stock||0)})`;
+    const controls = document.createElement('div');
+    controls.className = 'admin-controls';
+    const editBtn = document.createElement('button'); editBtn.textContent = 'Edit';
+    const delBtn = document.createElement('button'); delBtn.textContent = 'Delete';
+    editBtn.addEventListener('click', async ()=>{ const data = await apiGet('items'); if(!data || !data[id]){ alert('Item not found on server'); await loadItems(); return; } editItemPopulate(id, data[id]); });
+    delBtn.addEventListener('click', async ()=> deleteItem(id));
+    controls.appendChild(editBtn); controls.appendChild(delBtn);
+    d.appendChild(left); d.appendChild(controls);
+    list.appendChild(d);
+  }
+}
+
+function editItemPopulate(id, item){
+  if(!adminUnlocked || !adminUser){ alert('Admin required'); return; }
+  document.getElementById('itemId').value = id;
+  document.getElementById('itemTitle').value = item.title || '';
+  document.getElementById('itemPrice').value = (typeof item.price === 'number') ? item.price : (item.price || '');
+  document.getElementById('itemStock').value = item.stock || 0;
+  document.getElementById('itemDesc').value = item.desc || '';
+  document.getElementById('itemTitle').scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+async function deleteItem(id){
+  if(!adminUnlocked || !adminUser){ alert('Admin required'); return; }
+  id = String(id);
+  let data = await apiGet('items');
+  if(!data || typeof data !== 'object'){ alert('No items data on server'); return; }
+  if(!Object.prototype.hasOwnProperty.call(data, id)){ alert('Item not found: ' + id); await loadItems(); return; }
+  const title = data[id].title || id;
+  if(!confirm(`Delete item "${title}"? This cannot be undone.`)) return;
+  delete data[id];
+  const res = await apiPost('items', data);
+  if(!res || !res.ok){ console.error('Failed to save updated items after delete:', res); alert('Failed to delete item on server. See console.'); await loadItems(); return; }
+  await logAdmin(`Deleted item "${title}" (id:${id})`);
+  await loadItems();
+}
+
+// ==== admin log view ====
+async function viewAdminLog(){
+  if(!adminUnlocked || !adminUser){ alert('Admin required'); return; }
+  try{
+    const res = await fetchFile('shopping-site/admin_log.txt');
+    const view = document.getElementById('adminLogView');
+    if(!res || !res.ok){ view.textContent = '(no log yet)'; view.style.display = 'block'; return; }
+    const txt = await res.text();
+    view.textContent = txt || '(no log entries)';
+    view.style.display = 'block';
+  }catch(e){ console.error('viewAdminLog error', e); alert('Failed to load admin log'); }
+}
+
+// ==== orders view / helpers ====
+async function viewOrders(){
+  if(!adminUnlocked || !adminUser){ alert('Admin required'); return; }
+  const listEl = document.getElementById('ordersList');
+  const viewEl = document.getElementById('ordersView');
+  const filter = document.getElementById('ordersFilter').value;
+  listEl.innerHTML = '<small>Loading orders…</small>';
+  viewEl.style.display = 'none';
+  try{
+    let filesRaw = await listFilesWithPrefix('shopping-site/orders/');
+    if(!filesRaw || filesRaw.length === 0){ listEl.innerHTML = '<small>No orders found</small>'; return; }
+    const files = filesRaw.map(f => f.replace(/^\/+|\/+$/g,''));
+    files.sort((a,b)=>{
+      const ra = a.match(/order(\d+)\.txt$/i);
+      const rb = b.match(/order(\d+)\.txt$/i);
+      const na = ra ? parseInt(ra[1].replace(/^0+/, '') || 0,10) : 0;
+      const nb = rb ? parseInt(rb[1].replace(/^0+/, '') || 0,10) : 0;
+      return nb - na;
+    });
+    listEl.innerHTML = '';
+    for(const f of files){
+      let status = 'pending';
+      let content = '';
+      try{
+        const res = await fetchFile(f);
+        if(res && res.ok){
+          content = await res.text();
+          if(/STATUS:\s*DONE/i.test(content)) status='done';
+          if(/DELETED by/i.test(content)) status='deleted';
+        } else { console.warn('Cannot read order:', f, res && res.status); }
+      }catch(e){ console.error('Error reading order', f, e); }
+      if(filter === 'done' && status !== 'done') continue;
+      if(filter === 'pending' && status !== 'pending') continue;
+      if(filter === 'deleted' && status !== 'deleted') continue;
+
+      const row = document.createElement('div'); row.className = 'order-row';
+      const name = f.split('/').pop();
+      const left = document.createElement('div');
+      left.innerHTML = `<strong>${escapeHtml(name)}</strong><div class="muted" style="font-size:12px">${escapeHtml(f)}</div>`;
+      const right = document.createElement('div');
+      const badge = document.createElement('span');
+      badge.className = 'badge ' + (status==='done' ? 'badge-done' : status==='deleted' ? 'badge-deleted' : '');
+      badge.textContent = status.toUpperCase();
+      const actions = document.createElement('div'); actions.className = 'order-actions';
+      const viewBtn = document.createElement('button'); viewBtn.textContent = 'View';
+      viewBtn.onclick = async ()=> {
+        try{
+          const r = await fetchFile(f);
+          if(!r || !r.ok){ alert(`Cannot read order: server returned ${r ? r.status : '(no response)'}`); return; }
+          const txt = await r.text();
+          viewEl.textContent = txt;
+          viewEl.style.display = 'block';
+        }catch(e){ console.error('view order error', f, e); alert('Failed to fetch order file. See console.'); }
+      };
+      const doneBtn = document.createElement('button'); doneBtn.textContent = 'Mark Done';
+      doneBtn.onclick = async ()=> {
+        if(status==='done'){ alert('Order already marked done'); return; }
+        if(!confirm('Mark this order as DONE?')) return;
+        try{
+          const r = await fetchFile(f);
+          if(!r || !r.ok){ alert('Cannot read order to mark done'); return; }
+          let txt = await r.text();
+          txt += `\n\nSTATUS: DONE by ${adminUser} at ${timeNow()}\n`;
+          const blob = new Blob([txt], { type:'text/plain' });
+          const up = await uploadFile(f, blob);
+          if(!up || !up.ok){ alert('Failed to write DONE marker. See console.'); return; }
+          await logAdmin(`Marked order ${name} as DONE`);
+          alert('Order marked done');
+          await viewOrders();
+        }catch(e){ console.error('markDone exception', f, e); alert('Failed to mark done. See console.'); }
+      };
+      const delBtn = document.createElement('button'); delBtn.textContent = 'Delete';
+      delBtn.onclick = async ()=> {
+        if(!confirm('Overwrite order file with DELETED marker?')) return;
+        try{
+          const txt = `DELETED by ${adminUser} at ${timeNow()}\n`;
+          const blob = new Blob([txt], { type:'text/plain' });
+          const up = await uploadFile(f, blob);
+          if(!up || !up.ok){ alert('Failed to write delete marker. See console.'); return; }
+          await logAdmin(`Deleted order ${name}`);
+          alert('Order deleted (overwritten)');
+          await viewOrders();
+        }catch(e){ console.error('deleteOrder exception', f, e); alert('Failed to delete order. See console.'); }
+      };
+      actions.append(viewBtn, doneBtn, delBtn);
+      right.append(badge, actions);
+      row.append(left, right);
+      listEl.appendChild(row);
+    }
+  }catch(e){ console.error('viewOrders main error', e); listEl.innerHTML = '<small>Error loading orders</small>'; }
+}
+
+// get next order number by scanning existing order files; returns numeric
+async function getNextOrderNumber(){
+  try{
+    const files = await listFilesWithPrefix('shopping-site/orders/');
+    let maxNum = 0;
+    const re = /order(\d+)\.txt$/i;
+    for(const fRaw of files){
+      const f = fRaw.replace(/^\/+|\/+$/g,'');
+      const m = f.match(re);
+      if(m && m[1]){
+        // safe digit-by-digit parse (avoid float rounding on huge numbers)
+        const digits = m[1];
+        let val = 0;
+        for(let i=0;i<digits.length;i++){
+          const d = digits.charCodeAt(i) - 48;
+          if(d>=0 && d<=9) val = val*10 + d;
+        }
+        if(val > maxNum) maxNum = val;
+      }
+    }
+    return maxNum + 1;
+  }catch(e){ console.error('getNextOrderNumber error', e); return Date.now(); }
+}
+
+// ==== cart ====
+function addToCart(id){
+  cart[id] = (cart[id] || 0) + 1;
+  updateCartUI();
+}
+async function updateCartUI(){
+  // show human readable cart (title + qty + price)
+  cartList.innerHTML = '';
+  let total = 0;
+  const items = await apiGet('items');
+  for(const [id, qty] of Object.entries(cart)){
+    const li = document.createElement('li');
+    const it = items && items[id];
+    const title = it ? (it.title || id) : id;
+    const price = it ? Number(it.price || 0) : 0;
+    total += price * qty;
+    li.textContent = `${title} × ${qty} — ₹${(price * qty).toFixed(2)}`;
+    cartList.appendChild(li);
+  }
+  cartTotal.textContent = `Total: ₹${Number(total).toFixed(2)}`;
+}
+
+// place order with reservation and rollback logic
+async function placeOrder(){
+  if(!currentUser){ alert('Please login first'); return; }
+  // 1) read items
+  const origItems = await apiGet('items');
+  if(!origItems || Object.keys(origItems).length === 0){ alert('No items on server'); return; }
+  // 2) validate and prepare newItems
+  const newItems = JSON.parse(JSON.stringify(origItems));
+  let lines = [];
+  let totalCents = 0;
+  for(const [id, qty] of Object.entries(cart)){
+    const it = newItems[id];
+    if(!it){ alert('Item not found: ' + id); return; }
+    const stock = Number(it.stock || 0);
+    const price = Number(it.price || 0);
+    if(stock < qty){ alert(`Not enough stock for "${it.title || id}"`); return; }
+    const unitCents = Math.round(price * 100);
+    totalCents += unitCents * qty;
+    lines.push({ title: it.title || id, qty, unitPrice: price });
+    newItems[id].stock = stock - qty;
+  }
+  // 3) reserve stock (save updated items)
+  const saveRes = await apiPost('items', newItems);
+  if(!saveRes || !saveRes.ok){
+    console.error('Failed to update item stock before placing order:', saveRes);
+    alert('Failed to reserve stock on server. Order aborted. See console.');
     return;
   }
-  files.forEach(fname => {
-    const row = document.createElement('div');
-    row.style.borderBottom = '1px solid #eee';
-    row.style.padding = '8px 0';
-    const a = document.createElement('a');
-    a.href = `${SERVER_URL}${ORDERS_FOLDER}/${encodeURIComponent(fname)}`;
-    a.textContent = fname;
-    a.target = '_blank';
-    row.appendChild(a);
-
-    const viewBtn = document.createElement('button'); viewBtn.className='btn'; viewBtn.style.marginLeft='8px';
-    viewBtn.textContent = 'Open';
-    viewBtn.addEventListener('click', async ()=> {
-      // open raw order content in modal
-      try {
-        const res = await fetch(`${SERVER_URL}${ORDERS_FOLDER}/${encodeURIComponent(fname)}`);
-        if (!res.ok) { alert(`Cannot read order: ${fname} (${res.status})`); return; }
-        const text = await res.text();
-        alert(text); // quick view; you can replace with nicer UI
-      } catch(e){ alert('Error: ' + e.message); }
-    });
-    row.appendChild(viewBtn);
-
-    const delBtn = document.createElement('button'); delBtn.className='btn'; delBtn.style.marginLeft='6px';
-    delBtn.textContent = 'Delete';
-    delBtn.addEventListener('click', async ()=> {
-      if (!confirm('Delete ' + fname + '?')) return;
-      try {
-        // try API delete
-        const res = await fetch(`${SERVER_URL}${API_ORDERS}/${encodeURIComponent(fname)}`, { method: 'DELETE' });
-        if (res.ok) { row.remove(); return; }
-        // try DELETE on /orders/<file> (some servers permit)
-        const res2 = await fetch(`${SERVER_URL}${ORDERS_FOLDER}/${encodeURIComponent(fname)}`, { method: 'DELETE' });
-        if (res2.ok) { row.remove(); return; }
-        alert('Delete failed (server did not support delete).');
-      } catch(e){ alert('Delete failed: ' + e.message); }
-    });
-    row.appendChild(delBtn);
-
-    ordersListEl.appendChild(row);
-  });
+  // 4) build order text + filename
+  const orderNum = await getNextOrderNumber();
+  const filenamePrimary = `shopping-site/orders/order${orderNum}.txt`;
+  const filenameFallback = `shopping-site/order${orderNum}.txt`;
+  const isoTime = new Date().toISOString();
+  let orderText = `Order: ${orderNum}\nTime: ${isoTime}\nName: ${currentUser.name}\nPhone: ${currentUser.phone}\n\nItems:\n`;
+  for(const li of lines) orderText += `- ${li.title} x${li.qty} @ ${Number(li.unitPrice).toFixed(2)}\n`;
+  orderText += `\nTotal: ₹${(totalCents/100).toFixed(2)}\n`;
+  const blob = new Blob([orderText], { type: 'text/plain' });
+  // 5) attempt primary upload then fallback
+  try{
+    let up = await uploadFile(filenamePrimary, blob);
+    if(up && up.ok){
+      cart = {}; updateCartUI();
+      alert(`Order placed: ${filenamePrimary}`);
+      return;
+    }
+    const body1 = up ? (await up.text().catch(()=>'(no body)')) : '(no response)';
+    console.warn('Primary upload failed', up && up.status, body1);
+    // fallback
+    let up2 = await uploadFile(filenameFallback, blob);
+    if(up2 && up2.ok){
+      cart = {}; updateCartUI();
+      alert(`Order placed (fallback): ${filenameFallback}`);
+      return;
+    }
+    const body2 = up2 ? (await up2.text().catch(()=>'(no body)')) : '(no response)';
+    console.error('Both uploads failed', { primary: up && up.status, body1, fallback: up2 && up2.status, body2 });
+    // rollback
+    const rollback = await apiPost('items', origItems);
+    if(!rollback || !rollback.ok){
+      console.error('Rollback failed — items state may be inconsistent.', rollback);
+      alert('Order failed to save and rollback failed. Check server logs; items may be inconsistent.');
+    } else {
+      alert(`Failed to save order file on server.\nPrimary: ${up ? up.status : '(no response)'} ${body1}\nFallback: ${up2 ? up2.status : '(no response)'} ${body2}\nStock changes rolled back.`);
+    }
+    return;
+  }catch(err){
+    console.error('Upload exception', err);
+    const rollback = await apiPost('items', origItems);
+    if(!rollback || !rollback.ok){
+      console.error('Rollback failed after exception', rollback);
+      alert('Order failed due to upload error and rollback failed. See console.');
+    } else {
+      alert('Order failed due to upload error; stock changes rolled back. See console for details.');
+    }
+    return;
+  }
 }
 
-/* ---------- Utilities ---------- */
+// ==== UI wiring ====
+function showLogin(){ document.getElementById('loginModal').style.display = 'block'; }
+function hideLogin(){ document.getElementById('loginModal').style.display = 'none'; }
+function showAdminLogin(){ document.getElementById('adminModal').style.display = 'block'; }
+function hideAdminLogin(){ document.getElementById('adminModal').style.display = 'none'; }
+function updateUserUI(){ document.getElementById('userInfo').textContent = currentUser ? currentUser.name : 'Guest'; document.getElementById('loginBtn').style.display = currentUser ? 'none' : 'inline'; document.getElementById('logoutBtn').style.display = currentUser ? 'inline' : 'none'; }
 
-function generateId(){
-  // simple unique id
-  return 'id_' + Math.random().toString(36).slice(2,9);
-}
+document.getElementById('loginBtn').onclick = showLogin;
+document.getElementById('closeModal').onclick = hideLogin;
+document.getElementById('loginSubmit').onclick = loginOrRegister;
+document.getElementById('logoutBtn').onclick = logout;
+document.getElementById('placeOrderBtn').onclick = placeOrder;
+document.getElementById('adminLoginBtn').onclick = showAdminLogin;
+document.getElementById('closeAdminModal').onclick = hideAdminLogin;
+document.getElementById('adminLoginSubmit').onclick = adminLogin;
+document.getElementById('saveItemBtn').onclick = saveItem;
+document.getElementById('clearEditBtn').onclick = ()=>{ document.getElementById('itemId').value=''; document.getElementById('itemTitle').value=''; document.getElementById('itemPrice').value=''; document.getElementById('itemStock').value=''; document.getElementById('itemDesc').value=''; };
+document.getElementById('viewLogsBtn').onclick = viewAdminLog;
+document.getElementById('viewOrdersBtn').onclick = viewOrders;
+document.getElementById('ordersFilter').onchange = viewOrders;
+
+// ==== startup ====
+(async function init(){
+  baseUrl = await resolveServer();
+  showStatus('Server: ' + (baseUrl || 'unknown'), !!baseUrl);
+  try{
+    const r = await fetch(`${baseUrl}/room/default?key=${encodeURIComponent(serverKey)}`);
+    if(r.ok){ showStatus('Connected ✓', true); await loadItems(); }
+    else showStatus('Key invalid or server error ✗', false);
+  }catch(e){ showStatus('Server unreachable ✗', false); console.error(e); }
+})();
 </script>
 </body>
 </html>
