@@ -132,24 +132,21 @@
 
 // ==== CONFIG ====
 let baseUrl = null;
-const serverKey = "5duM4W8HZiQBSU4v"; // keep secret in server ideally
+const serverKey = "5duM4W8HZiQBSU4v";
 let currentUser = null;
-let cart = {};           // { id: qty }
+let cart = {};            
 let adminUser = null;
 let adminUnlocked = false;
 
-// DOM refs
 const statusBar = document.getElementById('statusBar');
 const itemList = document.getElementById('itemList');
 const cartList = document.getElementById('cartList');
 const cartTotal = document.getElementById('cartTotal');
 
-// helpers
 function showStatus(text, ok){ statusBar.textContent = text; statusBar.className = ok ? "status-ok" : "status-bad"; }
-function timeNow(){ const d=new Date(); const pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+function timeNow(){ const d=new Date(), pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-// ==== Server resolution ====
 async function resolveServer(){
   try{
     const origin = (location.protocol === 'file:') ? null : location.origin;
@@ -167,15 +164,18 @@ async function resolveServer(){
   return "http://localhost:8080";
 }
 
-// ==== low-level API helpers (room/file/files as in your server) ====
 async function apiPost(room, data){
   try {
     const url = `${baseUrl}/room/${room}?key=${encodeURIComponent(serverKey)}`;
-    const res = await fetch(url, { method:'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
-    if(!res.ok){ const txt = await res.text().catch(()=>''); console.error('apiPost failed', res.status, txt); return {ok:false, status:res.status, text:txt}; }
+    const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    if(!res.ok){
+      const txt = await res.text().catch(()=>'');
+      console.error('apiPost failed', res.status, txt);
+      return { ok:false, status:res.status, text:txt };
+    }
     let json = null; try{ json = await res.json(); }catch(e){ json=null; }
     return { ok:true, status:res.status, json };
-  } catch(e){ console.error('apiPost error', e); return { ok:false, error:e }; }
+  }catch(e){ console.error('apiPost error', e); return { ok:false, error:e }; }
 }
 
 async function apiGet(room){
@@ -185,57 +185,87 @@ async function apiGet(room){
     if(!res.ok) return {};
     const j = await res.json();
     return j.data || {};
-  } catch(e){ console.error('apiGet error', e); return {}; }
+  }catch(e){ console.error('apiGet error', e); return {}; }
 }
 
-// Try to fetch file through your /file/ endpoint first; fallback to direct static URL (baseUrl + '/' + path)
 async function fetchFile(path){
-  // path is something like "shopping-site/orders/order1.txt"
-  // try server's /file/<encodedPath>?key=...
-  try {
-    const p1 = encodeURIComponent(path);
-    const url1 = `${baseUrl}/file/${p1}?key=${encodeURIComponent(serverKey)}`;
-    let res = await fetch(url1);
-    if(res.ok) return res;
-    // fallback: try direct static path
-    const url2 = `${baseUrl.replace(/\/$/,'')}/${path.replace(/^\/+/,'')}`;
-    res = await fetch(url2);
-    if(res.ok) return res;
-    // another fallback: try with "shopping-site/" prefix removed for older structure
-    const last = path.split('/').pop();
-    const url3 = `${baseUrl.replace(/\/$/,'')}/${last}`;
-    res = await fetch(url3);
-    return res; // return even if not ok for caller to inspect status
-  } catch(e){
-    console.error('fetchFile error', e);
-    throw e;
+  const tried = [];
+  let lastError = null;
+
+  const urlFile = `${baseUrl.replace(/\/$/,'')}/file/${encodeURIComponent(path)}?key=${encodeURIComponent(serverKey)}`;
+  tried.push(urlFile);
+  const urlDirectWithKey = `${baseUrl.replace(/\/$/,'')}/${path.replace(/^\/+/,'')}?key=${encodeURIComponent(serverKey)}`;
+  tried.push(urlDirectWithKey);
+  const urlDirect = `${baseUrl.replace(/\/$/,'')}/${path.replace(/^\/+/,'')}`;
+  tried.push(urlDirect);
+
+  for(const url of tried){
+    try{
+      console.info('fetchFile trying', url);
+      const controller = new AbortController();
+      const timer = setTimeout(()=> controller.abort(), 8000);
+      const res = await fetch(url, { signal: controller.signal, credentials:'same-origin' });
+      clearTimeout(timer);
+      if(res && res.ok){
+        console.info('fetchFile success', url);
+        return res;
+      }
+      if(res){
+        const bodyText = await res.text().catch(()=>'(no body)');
+        console.warn('fetchFile non-ok', url, res.status, bodyText);
+        lastError = new Error(`HTTP ${res.status}: ${bodyText}`);
+      }
+    }catch(err){
+      console.warn('fetchFile attempt error', url, err && err.message);
+      lastError = err;
+    }
   }
+
+  return {
+    ok: false,
+    status: (lastError && lastError.status) || 0,
+    text: async ()=> `Failed to fetch. Tried: ${tried.join(' ; ')}. Last error: ${lastError && lastError.message}`
+  };
 }
 
 async function uploadFile(path, blob){
-  // try /file/<encodedPath>?key=... with multipart form data
+  const tried = [];
   try{
+    const urlFile = `${baseUrl.replace(/\/$/,'')}/file/${encodeURIComponent(path)}?key=${encodeURIComponent(serverKey)}`;
+    tried.push(urlFile);
     const form = new FormData();
     form.append('file', blob, path.split('/').pop() || 'upload.txt');
-    const p1 = encodeURIComponent(path);
-    const url1 = `${baseUrl}/file/${p1}?key=${encodeURIComponent(serverKey)}`;
-    let res = await fetch(url1, { method:'POST', body: form });
-    if(res.ok) return res;
-    // fallback: try PUT to direct path if supported (some servers may accept)
-    try {
-      const url2 = `${baseUrl.replace(/\/$/,'')}/${path.replace(/^\/+/,'')}`;
-      res = await fetch(url2, { method:'PUT', body: blob, headers: { 'Content-Type':'text/plain' } });
-      return res;
-    } catch(e){}
-    return res;
-  } catch(e){
-    console.error('uploadFile error', e);
-    throw e;
+    let res = await fetch(urlFile, { method:'POST', body: form });
+    if(res && res.ok) return res;
+    console.warn('uploadFile primary non-ok', res && res.status, await res.text().catch(()=>'(no body)'));
+  }catch(e){
+    console.warn('uploadFile primary error', e && e.message);
+  }
+
+  try{
+    const urlPutWithKey = `${baseUrl.replace(/\/$/,'')}/${path.replace(/^\/+/,'')}?key=${encodeURIComponent(serverKey)}`;
+    tried.push(urlPutWithKey);
+    let res2 = await fetch(urlPutWithKey, { method:'PUT', body: blob, headers:{'Content-Type':'text/plain'} });
+    if(res2 && res2.ok) return res2;
+    console.warn('uploadFile fallback non-ok', res2 && res2.status, await res2.text().catch(()=>'(no body)'));
+  }catch(e){
+    console.warn('uploadFile fallback error', e && e.message);
+  }
+
+  try{
+    const urlPut = `${baseUrl.replace(/\/$/,'')}/${path.replace(/^\/+/,'')}`;
+    tried.push(urlPut);
+    let res3 = await fetch(urlPut, { method:'PUT', body: blob, headers:{'Content-Type':'text/plain'} });
+    if(res3 && res3.ok) return res3;
+    console.warn('uploadFile final non-ok', res3 && res3.status, await res3.text().catch(()=>'(no body)'));
+    return res3;
+  }catch(e){
+    console.warn('uploadFile final error', e && e.message);
+    return { ok:false, status:0, text: async ()=> `Upload failed; tried ${tried.join(' ; ')}. Last error: ${e && e.message}` };
   }
 }
 
 async function listFilesWithPrefix(prefix){
-  // Try server endpoint /files?prefix=...
   try{
     const u = `${baseUrl}/files?key=${encodeURIComponent(serverKey)}&prefix=${encodeURIComponent(prefix)}`;
     const r = await fetch(u);
@@ -244,7 +274,7 @@ async function listFilesWithPrefix(prefix){
       if(Array.isArray(j.files)) return j.files;
     }
   }catch(e){ console.warn('listFilesWithPrefix primary failed', e); }
-  // Fallback: try an index file at prefix/index.json
+
   try{
     const idxUrl = `${baseUrl.replace(/\/$/,'')}/${prefix.replace(/\/$/,'')}/index.json`;
     const r2 = await fetch(idxUrl);
@@ -254,26 +284,24 @@ async function listFilesWithPrefix(prefix){
       if(Array.isArray(j2.files)) return j2.files;
     }
   }catch(e){}
+
   return [];
 }
 
-// ==== admin logging ====
 async function logAdmin(action){
   if(!adminUser) return;
   const line = `[${timeNow()}] ${adminUser}: ${action}\n`;
-  // append to admin_log.txt
   try{
-    let existing = '';
-    try {
+    let existing='';
+    try{
       const r = await fetchFile('shopping-site/admin_log.txt');
       if(r && r.ok) existing = await r.text();
-    } catch(e){}
+    }catch(e){}
     const blob = new Blob([existing + line], { type:'text/plain' });
     await uploadFile('shopping-site/admin_log.txt', blob);
-  } catch(e){ console.error('logAdmin write failed', e); }
+  }catch(e){ console.error('logAdmin write failed', e); }
 }
 
-// ==== auth ====
 async function loginOrRegister(){
   const name = document.getElementById("name").value.trim();
   const phone = document.getElementById("phone").value.trim();
@@ -282,7 +310,7 @@ async function loginOrRegister(){
   let accounts = await apiGet('accounts');
   if(!accounts || typeof accounts !== 'object') accounts = {};
   if(!accounts[phone]){
-    accounts[phone] = { name: name || phone, phone, password: pass, role: 'user' };
+    accounts[phone] = { name: name || phone, phone, password: pass, role:'user' };
     const res = await apiPost('accounts', accounts);
     if(!res || !res.ok){ alert('Failed to create account'); return; }
     alert('Account created & logged in');
@@ -295,7 +323,7 @@ async function loginOrRegister(){
   updateUserUI();
   await loadItems();
 }
-function logout(){ currentUser = null; adminUnlocked = false; adminUser = null; updateUserUI(); document.getElementById('adminPanel').style.display='none'; document.getElementById('adminUnlocked').style.display='none'; loadItems(); }
+function logout(){ currentUser=null; adminUnlocked=false; adminUser=null; updateUserUI(); document.getElementById('adminPanel').style.display='none'; document.getElementById('adminUnlocked').style.display='none'; loadItems(); }
 async function adminLogin(){
   const user = document.getElementById("adminUser").value.trim();
   const pass = document.getElementById("adminPass").value;
@@ -305,17 +333,17 @@ async function adminLogin(){
     if(!r || !r.ok){ alert('Cannot access admins.txt'); return; }
     const text = await r.text();
     const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-    let ok = false;
+    let ok=false;
     for(const line of lines){
       const parts = line.split(':');
-      if(parts.length >= 2){
+      if(parts.length>=2){
         const u = parts.shift();
         const p = parts.join(':');
-        if(u===user && p===pass){ ok = true; break; }
+        if(u===user && p===pass){ ok=true; break; }
       }
     }
     if(ok){
-      adminUser = user; adminUnlocked = true;
+      adminUser=user; adminUnlocked=true;
       document.getElementById('adminPanel').style.display='block';
       document.getElementById('adminUnlocked').style.display='block';
       hideAdminLogin();
@@ -326,7 +354,6 @@ async function adminLogin(){
   }catch(e){ console.error('adminLogin error', e); alert('Failed to verify admin credentials'); }
 }
 
-// ==== items ====
 async function loadItems(){
   const items = await apiGet('items');
   itemList.innerHTML = '';
@@ -336,13 +363,13 @@ async function loadItems(){
     for(const it of Object.values(items)){
       const el = document.createElement('div');
       el.className = 'item';
-      const priceNum = (typeof it.price === 'number') ? it.price : parseFloat(it.price || 0);
+      const priceNum = (typeof it.price === 'number') ? it.price : parseFloat(it.price||0);
       const priceStr = Number.isFinite(priceNum) ? priceNum.toFixed(2) : '0.00';
       el.innerHTML = `<strong>${escapeHtml(it.title)}</strong> — ₹${priceStr}<br/>
-                      <div style="margin-top:6px">${escapeHtml(it.desc || '')}</div>
-                      <div style="margin-top:8px">Stock: ${Number(it.stock || 0)}</div>
+                      <div style="margin-top:6px">${escapeHtml(it.desc||'')}</div>
+                      <div style="margin-top:8px">Stock: ${Number(it.stock||0)}</div>
                       <div style="margin-top:8px">
-                        <button ${!currentUser || (Number(it.stock||0) <= 0) ? 'disabled' : ''} data-id="${escapeHtml(it.id)}">Add to Cart</button>
+                        <button ${!currentUser || (Number(it.stock||0)<=0) ? 'disabled' : ''} data-id="${escapeHtml(it.id)}">Add to Cart</button>
                       </div>`;
       const btn = el.querySelector('button');
       btn.addEventListener('click', ()=> addToCart(String(it.id)));
@@ -357,8 +384,8 @@ async function saveItem(){
   if(!adminUnlocked || !adminUser){ alert('Admin required'); return; }
   const idInput = document.getElementById('itemId').value.trim();
   const title = document.getElementById('itemTitle').value.trim();
-  const price = parseFloat(document.getElementById('itemPrice').value.trim() || '0');
-  const stock = parseInt(document.getElementById('itemStock').value.trim() || '0');
+  const price = parseFloat(document.getElementById('itemPrice').value.trim()||'0');
+  const stock = parseInt(document.getElementById('itemStock').value.trim()||'0');
   const desc = document.getElementById('itemDesc').value.trim();
   if(!title){ alert('Title required'); return; }
 
@@ -390,7 +417,7 @@ function renderAdminList(items){
     controls.className = 'admin-controls';
     const editBtn = document.createElement('button'); editBtn.textContent = 'Edit';
     const delBtn = document.createElement('button'); delBtn.textContent = 'Delete';
-    editBtn.addEventListener('click', async ()=>{ const data = await apiGet('items'); if(!data || !data[id]){ alert('Item not found on server'); await loadItems(); return; } editItemPopulate(id, data[id]); });
+    editBtn.addEventListener('click', async ()=>{ const data = await apiGet('items'); if(!data || !data[id]){ alert('Item not found on server'); await loadItems(); return; } editItemPopulate(id,data[id]); });
     delBtn.addEventListener('click', async ()=> deleteItem(id));
     controls.appendChild(editBtn); controls.appendChild(delBtn);
     d.appendChild(left); d.appendChild(controls);
@@ -398,22 +425,22 @@ function renderAdminList(items){
   }
 }
 
-function editItemPopulate(id, item){
-  if(!adminUnlocked || !adminUser){ alert('Admin required'); return; }
+function editItemPopulate(id,item){
+  if(!adminUnlocked||!adminUser){ alert('Admin required'); return; }
   document.getElementById('itemId').value = id;
   document.getElementById('itemTitle').value = item.title || '';
-  document.getElementById('itemPrice').value = (typeof item.price === 'number') ? item.price : (item.price || '');
+  document.getElementById('itemPrice').value = (typeof item.price==='number' ? item.price : (item.price||''));  
   document.getElementById('itemStock').value = item.stock || 0;
   document.getElementById('itemDesc').value = item.desc || '';
   document.getElementById('itemTitle').scrollIntoView({behavior:'smooth', block:'center'});
 }
 
 async function deleteItem(id){
-  if(!adminUnlocked || !adminUser){ alert('Admin required'); return; }
+  if(!adminUnlocked||!adminUser){ alert('Admin required'); return; }
   id = String(id);
   let data = await apiGet('items');
-  if(!data || typeof data !== 'object'){ alert('No items data on server'); return; }
-  if(!Object.prototype.hasOwnProperty.call(data, id)){ alert('Item not found: ' + id); await loadItems(); return; }
+  if(!data||typeof data!=='object'){ alert('No items data on server'); return; }
+  if(!Object.prototype.hasOwnProperty.call(data,id)){ alert('Item not found: '+id); await loadItems(); return; }
   const title = data[id].title || id;
   if(!confirm(`Delete item "${title}"? This cannot be undone.`)) return;
   delete data[id];
@@ -423,55 +450,56 @@ async function deleteItem(id){
   await loadItems();
 }
 
-// ==== admin log view ====
 async function viewAdminLog(){
-  if(!adminUnlocked || !adminUser){ alert('Admin required'); return; }
+  if(!adminUnlocked||!adminUser){ alert('Admin required'); return; }
   try{
-    const res = await fetchFile('shopping-site/admin_log.txt');
+    const r = await fetchFile('shopping-site/admin_log.txt');
     const view = document.getElementById('adminLogView');
-    if(!res || !res.ok){ view.textContent = '(no log yet)'; view.style.display = 'block'; return; }
-    const txt = await res.text();
+    if(!r || !r.ok){ view.textContent = '(no log yet)'; view.style.display='block'; return; }
+    const txt = await r.text();
     view.textContent = txt || '(no log entries)';
-    view.style.display = 'block';
+    view.style.display='block';
   }catch(e){ console.error('viewAdminLog error', e); alert('Failed to load admin log'); }
 }
 
-// ==== orders view / helpers ====
 async function viewOrders(){
-  if(!adminUnlocked || !adminUser){ alert('Admin required'); return; }
+  if(!adminUnlocked||!adminUser){ alert('Admin required'); return; }
   const listEl = document.getElementById('ordersList');
   const viewEl = document.getElementById('ordersView');
   const filter = document.getElementById('ordersFilter').value;
   listEl.innerHTML = '<small>Loading orders…</small>';
   viewEl.style.display = 'none';
+
   try{
     let filesRaw = await listFilesWithPrefix('shopping-site/orders/');
-    if(!filesRaw || filesRaw.length === 0){ listEl.innerHTML = '<small>No orders found</small>'; return; }
-    const files = filesRaw.map(f => f.replace(/^\/+|\/+$/g,''));
+    if(!filesRaw || filesRaw.length ===0){ listEl.innerHTML = '<small>No orders found</small>'; return; }
+    const files = filesRaw.map(f=>f.replace(/^\/+|\/+$/g,''));
     files.sort((a,b)=>{
       const ra = a.match(/order(\d+)\.txt$/i);
       const rb = b.match(/order(\d+)\.txt$/i);
-      const na = ra ? parseInt(ra[1].replace(/^0+/, '') || 0,10) : 0;
-      const nb = rb ? parseInt(rb[1].replace(/^0+/, '') || 0,10) : 0;
+      const na = ra ? parseInt(ra[1].replace(/^0+/,''),10) : 0;
+      const nb = rb ? parseInt(rb[1].replace(/^0+/,''),10) : 0;
       return nb - na;
     });
     listEl.innerHTML = '';
+
     for(const f of files){
-      let status = 'pending';
-      let content = '';
+      let status='pending';
+      let content='';
       try{
-        const res = await fetchFile(f);
-        if(res && res.ok){
-          content = await res.text();
+        const r = await fetchFile(f);
+        if(r && r.ok){
+          content = await r.text();
           if(/STATUS:\s*DONE/i.test(content)) status='done';
           if(/DELETED by/i.test(content)) status='deleted';
-        } else { console.warn('Cannot read order:', f, res && res.status); }
+        } else { console.warn('Cannot read order:', f, r && r.status); }
       }catch(e){ console.error('Error reading order', f, e); }
-      if(filter === 'done' && status !== 'done') continue;
-      if(filter === 'pending' && status !== 'pending') continue;
-      if(filter === 'deleted' && status !== 'deleted') continue;
 
-      const row = document.createElement('div'); row.className = 'order-row';
+      if(filter==='done' && status!=='done') continue;
+      if(filter==='pending' && status!=='pending') continue;
+      if(filter==='deleted' && status!=='deleted') continue;
+
+      const row = document.createElement('div'); row.className='order-row';
       const name = f.split('/').pop();
       const left = document.createElement('div');
       left.innerHTML = `<strong>${escapeHtml(name)}</strong><div class="muted" style="font-size:12px">${escapeHtml(f)}</div>`;
@@ -479,19 +507,19 @@ async function viewOrders(){
       const badge = document.createElement('span');
       badge.className = 'badge ' + (status==='done' ? 'badge-done' : status==='deleted' ? 'badge-deleted' : '');
       badge.textContent = status.toUpperCase();
-      const actions = document.createElement('div'); actions.className = 'order-actions';
-      const viewBtn = document.createElement('button'); viewBtn.textContent = 'View';
-      viewBtn.onclick = async ()=> {
+      const actions = document.createElement('div'); actions.className='order-actions';
+      const viewBtn = document.createElement('button'); viewBtn.textContent='View';
+      viewBtn.onclick = async ()=>{
         try{
           const r = await fetchFile(f);
-          if(!r || !r.ok){ alert(`Cannot read order: server returned ${r ? r.status : '(no response)'}`); return; }
+          if(!r || !r.ok){ alert(`Cannot read order: server returned ${r? r.status : '(no response)'}`); return; }
           const txt = await r.text();
           viewEl.textContent = txt;
-          viewEl.style.display = 'block';
+          viewEl.style.display='block';
         }catch(e){ console.error('view order error', f, e); alert('Failed to fetch order file. See console.'); }
       };
-      const doneBtn = document.createElement('button'); doneBtn.textContent = 'Mark Done';
-      doneBtn.onclick = async ()=> {
+      const doneBtn = document.createElement('button'); doneBtn.textContent='Mark Done';
+      doneBtn.onclick = async ()=>{
         if(status==='done'){ alert('Order already marked done'); return; }
         if(!confirm('Mark this order as DONE?')) return;
         try{
@@ -507,8 +535,8 @@ async function viewOrders(){
           await viewOrders();
         }catch(e){ console.error('markDone exception', f, e); alert('Failed to mark done. See console.'); }
       };
-      const delBtn = document.createElement('button'); delBtn.textContent = 'Delete';
-      delBtn.onclick = async ()=> {
+      const delBtn = document.createElement('button'); delBtn.textContent='Delete';
+      delBtn.onclick = async ()=>{
         if(!confirm('Overwrite order file with DELETED marker?')) return;
         try{
           const txt = `DELETED by ${adminUser} at ${timeNow()}\n`;
@@ -525,10 +553,10 @@ async function viewOrders(){
       row.append(left, right);
       listEl.appendChild(row);
     }
-  }catch(e){ console.error('viewOrders main error', e); listEl.innerHTML = '<small>Error loading orders</small>'; }
+
+  }catch(e){ console.error('viewOrders main error', e); listEl.innerHTML='<small>Error loading orders</small>'; }
 }
 
-// get next order number by scanning existing order files; returns numeric
 async function getNextOrderNumber(){
   try{
     const files = await listFilesWithPrefix('shopping-site/orders/');
@@ -538,7 +566,6 @@ async function getNextOrderNumber(){
       const f = fRaw.replace(/^\/+|\/+$/g,'');
       const m = f.match(re);
       if(m && m[1]){
-        // safe digit-by-digit parse (avoid float rounding on huge numbers)
         const digits = m[1];
         let val = 0;
         for(let i=0;i<digits.length;i++){
@@ -548,17 +575,16 @@ async function getNextOrderNumber(){
         if(val > maxNum) maxNum = val;
       }
     }
-    return maxNum + 1;
+    return maxNum +1;
   }catch(e){ console.error('getNextOrderNumber error', e); return Date.now(); }
 }
 
-// ==== cart ====
 function addToCart(id){
-  cart[id] = (cart[id] || 0) + 1;
+  cart[id] = (cart[id] || 0) +1;
   updateCartUI();
 }
+
 async function updateCartUI(){
-  // show human readable cart (title + qty + price)
   cartList.innerHTML = '';
   let total = 0;
   const items = await apiGet('items');
@@ -568,22 +594,20 @@ async function updateCartUI(){
     const title = it ? (it.title || id) : id;
     const price = it ? Number(it.price || 0) : 0;
     total += price * qty;
-    li.textContent = `${title} × ${qty} — ₹${(price * qty).toFixed(2)}`;
+    li.textContent = `${title} × ${qty} — ₹${(price*qty).toFixed(2)}`;
     cartList.appendChild(li);
   }
   cartTotal.textContent = `Total: ₹${Number(total).toFixed(2)}`;
 }
 
-// place order with reservation and rollback logic
 async function placeOrder(){
   if(!currentUser){ alert('Please login first'); return; }
-  // 1) read items
   const origItems = await apiGet('items');
   if(!origItems || Object.keys(origItems).length === 0){ alert('No items on server'); return; }
-  // 2) validate and prepare newItems
   const newItems = JSON.parse(JSON.stringify(origItems));
   let lines = [];
   let totalCents = 0;
+
   for(const [id, qty] of Object.entries(cart)){
     const it = newItems[id];
     if(!it){ alert('Item not found: ' + id); return; }
@@ -595,14 +619,14 @@ async function placeOrder(){
     lines.push({ title: it.title || id, qty, unitPrice: price });
     newItems[id].stock = stock - qty;
   }
-  // 3) reserve stock (save updated items)
+
   const saveRes = await apiPost('items', newItems);
   if(!saveRes || !saveRes.ok){
     console.error('Failed to update item stock before placing order:', saveRes);
     alert('Failed to reserve stock on server. Order aborted. See console.');
     return;
   }
-  // 4) build order text + filename
+
   const orderNum = await getNextOrderNumber();
   const filenamePrimary = `shopping-site/orders/order${orderNum}.txt`;
   const filenameFallback = `shopping-site/order${orderNum}.txt`;
@@ -610,8 +634,8 @@ async function placeOrder(){
   let orderText = `Order: ${orderNum}\nTime: ${isoTime}\nName: ${currentUser.name}\nPhone: ${currentUser.phone}\n\nItems:\n`;
   for(const li of lines) orderText += `- ${li.title} x${li.qty} @ ${Number(li.unitPrice).toFixed(2)}\n`;
   orderText += `\nTotal: ₹${(totalCents/100).toFixed(2)}\n`;
-  const blob = new Blob([orderText], { type: 'text/plain' });
-  // 5) attempt primary upload then fallback
+  const blob = new Blob([orderText], { type:'text/plain' });
+
   try{
     let up = await uploadFile(filenamePrimary, blob);
     if(up && up.ok){
@@ -621,7 +645,7 @@ async function placeOrder(){
     }
     const body1 = up ? (await up.text().catch(()=>'(no body)')) : '(no response)';
     console.warn('Primary upload failed', up && up.status, body1);
-    // fallback
+
     let up2 = await uploadFile(filenameFallback, blob);
     if(up2 && up2.ok){
       cart = {}; updateCartUI();
@@ -630,7 +654,7 @@ async function placeOrder(){
     }
     const body2 = up2 ? (await up2.text().catch(()=>'(no body)')) : '(no response)';
     console.error('Both uploads failed', { primary: up && up.status, body1, fallback: up2 && up2.status, body2 });
-    // rollback
+
     const rollback = await apiPost('items', origItems);
     if(!rollback || !rollback.ok){
       console.error('Rollback failed — items state may be inconsistent.', rollback);
@@ -652,11 +676,10 @@ async function placeOrder(){
   }
 }
 
-// ==== UI wiring ====
-function showLogin(){ document.getElementById('loginModal').style.display = 'block'; }
-function hideLogin(){ document.getElementById('loginModal').style.display = 'none'; }
-function showAdminLogin(){ document.getElementById('adminModal').style.display = 'block'; }
-function hideAdminLogin(){ document.getElementById('adminModal').style.display = 'none'; }
+function showLogin(){ document.getElementById('loginModal').style.display='block'; }
+function hideLogin(){ document.getElementById('loginModal').style.display='none'; }
+function showAdminLogin(){ document.getElementById('adminModal').style.display='block'; }
+function hideAdminLogin(){ document.getElementById('adminModal').style.display='none'; }
 function updateUserUI(){ document.getElementById('userInfo').textContent = currentUser ? currentUser.name : 'Guest'; document.getElementById('loginBtn').style.display = currentUser ? 'none' : 'inline'; document.getElementById('logoutBtn').style.display = currentUser ? 'inline' : 'none'; }
 
 document.getElementById('loginBtn').onclick = showLogin;
@@ -673,7 +696,6 @@ document.getElementById('viewLogsBtn').onclick = viewAdminLog;
 document.getElementById('viewOrdersBtn').onclick = viewOrders;
 document.getElementById('ordersFilter').onchange = viewOrders;
 
-// ==== startup ====
 (async function init(){
   baseUrl = await resolveServer();
   showStatus('Server: ' + (baseUrl || 'unknown'), !!baseUrl);
@@ -681,7 +703,10 @@ document.getElementById('ordersFilter').onchange = viewOrders;
     const r = await fetch(`${baseUrl}/room/default?key=${encodeURIComponent(serverKey)}`);
     if(r.ok){ showStatus('Connected ✓', true); await loadItems(); }
     else showStatus('Key invalid or server error ✗', false);
-  }catch(e){ showStatus('Server unreachable ✗', false); console.error(e); }
+  }catch(e){
+    showStatus('Server unreachable ✗', false);
+    console.error(e);
+  }
 })();
 </script>
 </body>
